@@ -5,8 +5,12 @@ res/
 # runtime
 workspace/*
 !workspace/.gitkeep
+!workspace/AGENTS.md
 sessions.json
+data.db
+data.db*
 TASK.md
+TOOLS_MEMO.md
 
 # dependencies (bun install)
 node_modules

@@ -10,7 +10,7 @@ export function runCodex(prompt: string, resumeId?: string): Promise<CodexResult
     const commonFlags = ["--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"];
     const args = resumeId
       ? ["exec", "resume", ...commonFlags, resumeId, prompt]
-      : ["exec", ...commonFlags, "--cd", process.env.WORKSPACE_DIR ?? "./workspace", prompt];
+      : ["exec", ...commonFlags, prompt];
 
     const proc = spawn("codex", args, {
       cwd: process.env.WORKSPACE_DIR ?? "./workspace",

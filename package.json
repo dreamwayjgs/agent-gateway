@@ -2,7 +2,8 @@
   "name": "agent-gateway",
   "module": "src/index.ts",
   "scripts": {
-    "start": "bun src/index.ts"
+    "start": "bun src/index.ts",
+    "test": "bun test tests/"
   },
   "type": "module",
   "private": true,

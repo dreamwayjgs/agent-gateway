@@ -1,47 +1,39 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { getDb } from "../db";
 
-type SessionEntry = {
-  sessionId: string;
-  updatedAt: number;
-};
+const TTL_SECONDS = (Number(process.env.SESSION_TTL_HOURS ?? 24)) * 3600;
+const RESET_SECONDS = (Number(process.env.SESSION_RESET_DAYS ?? 7)) * 86400;
 
-type SessionMap = Record<string, SessionEntry>;
+export function getSession(key: string): string | null {
+  const db = getDb();
+  const row = db.query<{ session_id: string; created_at: number; updated_at: number }, [string]>(
+    "SELECT session_id, created_at, updated_at FROM sessions WHERE key = ?"
+  ).get(key);
+  if (!row) return null;
 
-const TTL_MS = (Number(process.env.SESSION_TTL_HOURS ?? 24)) * 60 * 60 * 1000;
+  const now = Math.floor(Date.now() / 1000);
+  const expired = now - row.updated_at > TTL_SECONDS;
+  const resetDue = now - row.created_at > RESET_SECONDS;
 
-function load(file: string): SessionMap {
-  if (!existsSync(file)) return {};
-  try {
-    return JSON.parse(readFileSync(file, "utf-8"));
-  } catch {
-    return {};
-  }
-}
-
-function save(file: string, map: SessionMap) {
-  writeFileSync(file, JSON.stringify(map, null, 2));
-}
-
-export function getSession(file: string, key: string): string | null {
-  const map = load(file);
-  const entry = map[key];
-  if (!entry) return null;
-  if (Date.now() - entry.updatedAt > TTL_MS) {
-    delete map[key];
-    save(file, map);
+  if (expired || resetDue) {
+    db.run("DELETE FROM sessions WHERE key = ?", [key]);
     return null;
   }
-  return entry.sessionId;
+  return row.session_id;
 }
 
-export function setSession(file: string, key: string, sessionId: string) {
-  const map = load(file);
-  map[key] = { sessionId, updatedAt: Date.now() };
-  save(file, map);
+export function setSession(key: string, sessionId: string) {
+  const db = getDb();
+  const now = Math.floor(Date.now() / 1000);
+  const existing = db.query<{ created_at: number }, [string]>(
+    "SELECT created_at FROM sessions WHERE key = ?"
+  ).get(key);
+
+  db.run(
+    "INSERT OR REPLACE INTO sessions (key, session_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
+    [key, sessionId, existing?.created_at ?? now, now]
+  );
 }
 
-export function deleteSession(file: string, key: string) {
-  const map = load(file);
-  delete map[key];
-  save(file, map);
+export function deleteSession(key: string) {
+  getDb().run("DELETE FROM sessions WHERE key = ?", [key]);
 }
