@@ -1,7 +1,10 @@
 import { config } from "./config";
 
-export function getHelpText(): string {
+export function getHelpText(aliases: string[] = []): string {
   const trigger = config.botTriggerName;
+  const aliasNote = aliases.length
+    ? ` (단축어 (다음 한칸 띄어써야함): ${aliases.map((a) => `"${a.trim()}"`).join(", ")})`
+    : "";
   return `
 📖 사용 가능한 기능
 
@@ -26,6 +29,7 @@ export function getHelpText(): string {
 
 💬 자유 대화
 "${trigger} ..."로 시작하면 무엇이든 물어볼 수 있습니다.
+${aliasNote}
 
 🔧 명령어
 세션 재시작 — 대화 기록 초기화

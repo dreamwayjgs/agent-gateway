@@ -12,6 +12,7 @@ import { fetchKakaoPlaceInfo } from "./tools/kakaomap";
 import { fetchTmapPlaceInfo } from "./tools/tmap";
 
 const bot = new Bot(config.telegramToken);
+const TRIGGER_ALIASES = ["$ ", "% "];
 
 // 모든 메시지 저장
 bot.on("message", async (ctx, next) => {
@@ -79,9 +80,9 @@ bot.on("message:text", async (ctx) => {
 
   const sessionKey = `chat:${chatId}`;
 
-  const HELP_TRIGGERS = ["도움말", "help", "뭐 할 수 있어", "뭐할수있어"];
+  const HELP_TRIGGERS = ["도움말", "help", "헬프", "뭐하지", "뭐 할 수 있어", "뭐할수있어", "?"];
   if (HELP_TRIGGERS.some((t) => text.trim().toLowerCase() === t)) {
-    return ctx.reply(getHelpText());
+    return ctx.reply(getHelpText(TRIGGER_ALIASES));
   }
 
   if (tryUpdateMemo(chatId, text.trim())) {
@@ -102,8 +103,9 @@ bot.on("message:text", async (ctx) => {
   const isMapMessage = MAP_DOMAINS.some((d) => text.includes(d));
 
   const trigger = config.botTriggerName;
-  const hasTrigger = text.startsWith(trigger) || text.startsWith("$ ");
-  const triggerLen = text.startsWith("$ ") ? 2 : trigger.length;
+  const matchedAlias = TRIGGER_ALIASES.find((a) => text.startsWith(a));
+  const hasTrigger = text.startsWith(trigger) || !!matchedAlias;
+  const triggerLen = matchedAlias ? matchedAlias.length : trigger.length;
 
   // 그룹챗: 트리거도 없고 지도 링크도 없으면 저장만 하고 종료
   if (isGroup && !hasTrigger && !isMapMessage) return;
@@ -141,7 +143,7 @@ bot.on("message:text", async (ctx) => {
       const since = Math.floor(Date.now() / 1000) - contextMins * 60;
       const rows = getDb().query<{ first_name: string | null; text: string; date: number }, [number, number, number]>(
         `SELECT first_name, text, date FROM messages
-         WHERE chat_id = ? AND date >= ? AND text NOT LIKE '${trigger}%' AND text NOT LIKE '$ %'
+         WHERE chat_id = ? AND date >= ? AND text NOT LIKE '${trigger}%' AND text NOT LIKE '$ %' AND text NOT LIKE '% %'
          ORDER BY date DESC LIMIT ?`
       ).all(chatId, since, contextMax).reverse();
 
