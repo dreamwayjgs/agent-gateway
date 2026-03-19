@@ -1,22 +1,20 @@
 import { spawn } from "child_process";
 
-type CodexResult = {
+type GeminiResult = {
   response: string;
-  threadId: string;
+  sessionId: string;
 };
 
 const TIMEOUT_MS = Number(process.env.AGENT_TIMEOUT_MS ?? 5 * 60 * 1000);
 
 export class AgentTimeoutError extends Error {}
 
-export function runCodex(prompt: string, resumeId?: string): Promise<CodexResult> {
+export function runGemini(prompt: string, resumeId?: string): Promise<GeminiResult> {
   return new Promise((resolve, reject) => {
-    const commonFlags = ["--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"];
-    const args = resumeId
-      ? ["exec", "resume", ...commonFlags, resumeId, prompt]
-      : ["exec", ...commonFlags, prompt];
+    const args = ["-p", prompt, "-o", "stream-json", "--yolo"];
+    if (resumeId) args.push("-r", resumeId);
 
-    const proc = spawn("codex", args, {
+    const proc = spawn("gemini", args, {
       cwd: process.env.WORKSPACE_DIR ?? "./workspace",
       env: process.env,
     });
@@ -26,8 +24,8 @@ export function runCodex(prompt: string, resumeId?: string): Promise<CodexResult
       reject(new AgentTimeoutError("timeout"));
     }, TIMEOUT_MS);
 
-    let threadId = "";
-    let response = "";
+    let sessionId = "";
+    const responseParts: string[] = [];
     const stderr: string[] = [];
 
     proc.stdout.on("data", (chunk: Buffer) => {
@@ -40,13 +38,10 @@ export function runCodex(prompt: string, resumeId?: string): Promise<CodexResult
         } catch {
           continue;
         }
-        if (msg.type === "thread.started") {
-          threadId = msg.thread_id as string;
-        } else if (
-          msg.type === "item.completed" &&
-          (msg.item as Record<string, unknown>)?.type === "agent_message"
-        ) {
-          response = (msg.item as Record<string, unknown>).text as string;
+        if (msg.type === "init") {
+          sessionId = msg.session_id as string;
+        } else if (msg.type === "message" && msg.role === "assistant" && msg.delta === true) {
+          responseParts.push(msg.content as string);
         }
       }
     });
@@ -57,10 +52,11 @@ export function runCodex(prompt: string, resumeId?: string): Promise<CodexResult
 
     proc.on("close", (code) => {
       clearTimeout(timer);
+      const response = responseParts.join("");
       if (!response) {
-        reject(new Error(`codex exited with code ${code}. stderr: ${stderr.join("")}`));
+        reject(new Error(`gemini exited with code ${code}. stderr: ${stderr.join("")}`));
       } else {
-        resolve({ response, threadId });
+        resolve({ response, sessionId });
       }
     });
 

@@ -6,6 +6,12 @@ services:
     environment:
       - DB_FILE=/app/data/data.db
       - WORKSPACE_DIR=/app/workspace
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - ./data:/app/data
       - ./workspace/files:/app/workspace/files
+      - ./data/codex-auth:/root/.codex

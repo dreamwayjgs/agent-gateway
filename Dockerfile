@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y curl ca-certificates && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @openai/codex
+RUN npm install -g @openai/codex @google/gemini-cli
 
 WORKDIR /app
 

@@ -10,6 +10,7 @@ data/
 # workspace — runtime 파일은 제외, 지침/스크립트만 추적
 workspace/*
 !workspace/AGENTS.md
+!workspace/GEMINI.md
 !workspace/scripts/
 
 # dependencies

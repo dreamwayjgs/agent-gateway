@@ -2,6 +2,7 @@
   "name": "agent-gateway",
   "module": "src/index.ts",
   "scripts": {
+    "db:query": "bun src/query-db.ts",
     "start": "bun src/index.ts",
     "test": "bun test tests/"
   },

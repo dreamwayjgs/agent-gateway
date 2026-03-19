@@ -1,7 +1,8 @@
 import { Bot, InputFile } from "grammy";
 import { getDb } from "./db";
 import { config } from "./config";
-import { runCodex } from "./agent/codex";
+import { runCodex, AgentTimeoutError as CodexTimeoutError } from "./agent/codex";
+import { runGemini, AgentTimeoutError as GeminiTimeoutError } from "./agent/gemini";
 import { getSession, setSession, deleteSession } from "./agent/session";
 import { processTemplates, extractAlarms } from "./template";
 import { initAlarms } from "./alarm";
@@ -173,17 +174,26 @@ bot.on("message:text", async (ctx) => {
     console.error("세션 조회 실패:", err);
   }
 
-  let result;
+  let result: { response: string; sessionId: string };
   try {
-    result = await runCodex(finalPrompt, resumeId);
+    if (config.agentBackend === "gemini") {
+      const r = await runGemini(finalPrompt, resumeId);
+      result = { response: r.response, sessionId: r.sessionId };
+    } else {
+      const r = await runCodex(finalPrompt, resumeId);
+      result = { response: r.response, sessionId: r.threadId };
+    }
   } catch (err) {
     console.error(err);
+    if (err instanceof CodexTimeoutError || err instanceof GeminiTimeoutError) {
+      return ctx.reply("응답 시간이 너무 오래 걸려 중단했습니다.");
+    }
     return ctx.reply("에이전트 실행 중 오류가 발생했습니다.");
   }
 
   try {
-    if (result.threadId && result.threadId !== resumeId) {
-      setSession(sessionKey, result.threadId);
+    if (result.sessionId && result.sessionId !== resumeId) {
+      setSession(sessionKey, result.sessionId);
     }
   } catch (err) {
     console.error("세션 저장 실패:", err);
