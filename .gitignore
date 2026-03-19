@@ -1,49 +1,28 @@
-# etc
+# local-only files
 ref/
 res/
-
-# runtime
-workspace/*
-!workspace/.gitkeep
-!workspace/AGENTS.md
-!workspace/scripts/
-sessions.json
-data.db
-data.db*
 TASK.md
 TOOLS_MEMO.md
 
-# dependencies (bun install)
-node_modules
+# runtime data
+data/
 
-# output
-out
-dist
-*.tgz
+# workspace — runtime 파일은 제외, 지침/스크립트만 추적
+workspace/*
+!workspace/AGENTS.md
+!workspace/scripts/
 
-# code coverage
-coverage
-*.lcov
+# dependencies
+node_modules/
 
-# logs
-logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
-
-# dotenv environment variable files
+# env
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
 
-# caches
-.eslintcache
+# bun / ts build cache
 .cache
 *.tsbuildinfo
 
-# IntelliJ based IDEs
+# IDE
 .idea
-
-# Finder (MacOS) folder config
 .DS_Store

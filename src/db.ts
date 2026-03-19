@@ -1,4 +1,6 @@
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 
 const MIGRATIONS: { name: string; sql: string }[] = [
   {
@@ -55,7 +57,8 @@ let _db: Database | null = null;
 
 export function getDb(): Database {
   if (_db) return _db;
-  const file = process.env.DB_FILE ?? "./data.db";
+  const file = process.env.DB_FILE ?? "./data/data.db";
+  mkdirSync(dirname(file), { recursive: true });
   _db = new Database(file);
   _db.run("PRAGMA journal_mode=WAL");
   runMigrations(_db);
