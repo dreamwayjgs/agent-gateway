@@ -1,3 +1,13 @@
+# etc
+ref/
+res/
+
+# runtime
+workspace/*
+!workspace/.gitkeep
+sessions.json
+TASK.md
+
 # dependencies (bun install)
 node_modules
 
