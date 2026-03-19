@@ -38,7 +38,7 @@ bot.on("message", async (ctx, next) => {
 });
 
 async function handleFileMessage(
-  ctx: Parameters<Parameters<typeof bot.on<"message:document">>[1]>[0],
+  ctx: any,
   telegramFileId: string,
   fileName: string,
   mimeType: string | undefined
@@ -64,12 +64,12 @@ async function handleFileMessage(
 
 bot.on("message:document", async (ctx) => {
   const doc = ctx.message.document;
-  await handleFileMessage(ctx as any, doc.file_id, doc.file_name ?? `file_${ctx.message.date}`, doc.mime_type);
+  await handleFileMessage(ctx, doc.file_id, doc.file_name ?? `file_${ctx.message.date}`, doc.mime_type);
 });
 
 bot.on("message:photo", async (ctx) => {
   const photo = ctx.message.photo.at(-1)!; // 가장 큰 사이즈
-  await handleFileMessage(ctx as any, photo.file_id, `photo_${ctx.message.date}.jpg`, "image/jpeg");
+  await handleFileMessage(ctx, photo.file_id, `photo_${ctx.message.date}.jpg`, "image/jpeg");
 });
 
 bot.on("message:text", async (ctx) => {
@@ -80,7 +80,7 @@ bot.on("message:text", async (ctx) => {
 
   const sessionKey = `chat:${chatId}`;
 
-  const HELP_TRIGGERS = ["도움말", "help", "헬프", "뭐하지", "뭐 할 수 있어", "뭐할수있어", "?"];
+  const HELP_TRIGGERS = ["도움말", "help", "헬프", "뭐하지", '머하지', "뭐 할 수 있어", "뭐할수있어", "?"];
   if (HELP_TRIGGERS.some((t) => text.trim().toLowerCase() === t)) {
     return ctx.reply(getHelpText(TRIGGER_ALIASES));
   }
