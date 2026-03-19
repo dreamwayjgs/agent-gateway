@@ -1,9 +1,12 @@
-import { Bot } from "grammy";
+import { Bot, InputFile } from "grammy";
 import { getDb } from "./db";
 import { config } from "./config";
 import { runCodex } from "./agent/codex";
 import { getSession, setSession, deleteSession } from "./agent/session";
-import { processTemplates } from "./template";
+import { processTemplates, extractAlarms } from "./template";
+import { initAlarms } from "./alarm";
+import { getHelpText } from "./help";
+import { downloadAndSaveFile, tryUpdateMemo, extractFileRefs } from "./files";
 import { fetchNaverPlaceInfo } from "./tools/navermap";
 import { fetchKakaoPlaceInfo } from "./tools/kakaomap";
 import { fetchTmapPlaceInfo } from "./tools/tmap";
@@ -33,6 +36,41 @@ bot.on("message", async (ctx, next) => {
   await next();
 });
 
+async function handleFileMessage(
+  ctx: Parameters<Parameters<typeof bot.on<"message:document">>[1]>[0],
+  telegramFileId: string,
+  fileName: string,
+  mimeType: string | undefined
+) {
+  const chatId = ctx.message.chat.id;
+  const uploadedBy = ctx.message.from?.first_name ?? null;
+  const uploadedAt = ctx.message.date;
+  const caption = ctx.message.caption ?? null;
+
+  try {
+    const saved = await downloadAndSaveFile(
+      bot, telegramFileId, fileName, mimeType,
+      chatId, uploadedBy, caption, uploadedAt
+    );
+    const memoNote = caption ? ` (메모: ${caption})` : " — 메모: ## 뒤에 내용을 입력하세요.";
+    console.log(`[파일 저장] #${saved.id} ${saved.localPath}`);
+    await ctx.reply(`📎 저장됨: ${fileName}${memoNote}`);
+  } catch (err) {
+    console.error("파일 저장 실패:", err);
+    await ctx.reply("파일 저장 중 오류가 발생했습니다.");
+  }
+}
+
+bot.on("message:document", async (ctx) => {
+  const doc = ctx.message.document;
+  await handleFileMessage(ctx as any, doc.file_id, doc.file_name ?? `file_${ctx.message.date}`, doc.mime_type);
+});
+
+bot.on("message:photo", async (ctx) => {
+  const photo = ctx.message.photo.at(-1)!; // 가장 큰 사이즈
+  await handleFileMessage(ctx as any, photo.file_id, `photo_${ctx.message.date}.jpg`, "image/jpeg");
+});
+
 bot.on("message:text", async (ctx) => {
   const chatId = ctx.message.chat.id;
   const text = ctx.message.text;
@@ -40,6 +78,15 @@ bot.on("message:text", async (ctx) => {
   const isGroup = ctx.message.chat.type === "group" || ctx.message.chat.type === "supergroup";
 
   const sessionKey = `chat:${chatId}`;
+
+  const HELP_TRIGGERS = ["도움말", "help", "뭐 할 수 있어", "뭐할수있어"];
+  if (HELP_TRIGGERS.some((t) => text.trim().toLowerCase() === t)) {
+    return ctx.reply(getHelpText());
+  }
+
+  if (tryUpdateMemo(chatId, text.trim())) {
+    return ctx.reply("메모가 업데이트됐습니다.");
+  }
 
   if (text.trim() === "세션 재시작") {
     try {
@@ -55,7 +102,8 @@ bot.on("message:text", async (ctx) => {
   const isMapMessage = MAP_DOMAINS.some((d) => text.includes(d));
 
   const trigger = config.botTriggerName;
-  const hasTrigger = text.startsWith(trigger);
+  const hasTrigger = text.startsWith(trigger) || text.startsWith("$ ");
+  const triggerLen = text.startsWith("$ ") ? 2 : trigger.length;
 
   // 그룹챗: 트리거도 없고 지도 링크도 없으면 저장만 하고 종료
   if (isGroup && !hasTrigger && !isMapMessage) return;
@@ -78,7 +126,7 @@ bot.on("message:text", async (ctx) => {
 
   const prompt = isMapMessage && !hasTrigger
     ? `[지도 링크 감지]${mapMeta}\n${text}`
-    : hasTrigger ? `${text.slice(trigger.length).trimStart()}${mapMeta}` : text;
+    : hasTrigger ? `${text.slice(triggerLen).trimStart()}${mapMeta}` : text;
   const preview = prompt.slice(0, 160);
   console.log(`[${name}${isGroup ? " (그룹)" : ""}] ${preview}`);
 
@@ -93,7 +141,7 @@ bot.on("message:text", async (ctx) => {
       const since = Math.floor(Date.now() / 1000) - contextMins * 60;
       const rows = getDb().query<{ first_name: string | null; text: string; date: number }, [number, number, number]>(
         `SELECT first_name, text, date FROM messages
-         WHERE chat_id = ? AND date >= ? AND text NOT LIKE '${trigger}%'
+         WHERE chat_id = ? AND date >= ? AND text NOT LIKE '${trigger}%' AND text NOT LIKE '$ %'
          ORDER BY date DESC LIMIT ?`
       ).all(chatId, since, contextMax).reverse();
 
@@ -109,6 +157,12 @@ bot.on("message:text", async (ctx) => {
       // 컨텍스트 없이 계속 진행
     }
   }
+
+  const nowKst = new Date().toLocaleString("ko-KR", {
+    timeZone: config.timezone,
+    hour12: false,
+  });
+  finalPrompt = `[현재 시각: ${nowKst}] [채팅 ID: ${chatId}]\n\n${finalPrompt}`;
 
   let resumeId: string | undefined;
   try {
@@ -133,7 +187,8 @@ bot.on("message:text", async (ctx) => {
     console.error("세션 저장 실패:", err);
   }
 
-  const processed = processTemplates(result.response);
+  const { cleaned, refs } = extractFileRefs(result.response);
+  const processed = processTemplates(extractAlarms(cleaned, chatId));
   const messages: string[] = [];
   let textBuffer: string[] = [];
 
@@ -157,7 +212,18 @@ bot.on("message:text", async (ctx) => {
       await ctx.reply(chunk);
     }
   }
+
+  for (const ref of refs) {
+    try {
+      const data = await Bun.file(ref.localPath).bytes();
+      await ctx.replyWithDocument(new InputFile(data, ref.fileName));
+    } catch (err) {
+      console.error(`파일 전송 실패 #${ref.id}:`, err);
+      await ctx.reply(`파일 전송 실패: ${ref.fileName}`);
+    }
+  }
 });
 
+initAlarms(bot);
 bot.start();
 console.log(`Bot started (trigger: "${config.botTriggerName}")`);

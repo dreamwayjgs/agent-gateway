@@ -8,4 +8,5 @@ export const config = {
   contextMinutes: Number(process.env.CONTEXT_MINUTES ?? 5),
   contextMaxMessages: Number(process.env.CONTEXT_MAX_MESSAGES ?? 5),
   noAgent: process.env.NO_AGENT === "true",
+  timezone: process.env.TZ ?? "Asia/Seoul",
 };

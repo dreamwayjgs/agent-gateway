@@ -6,6 +6,7 @@ res/
 workspace/*
 !workspace/.gitkeep
 !workspace/AGENTS.md
+!workspace/scripts/
 sessions.json
 data.db
 data.db*
