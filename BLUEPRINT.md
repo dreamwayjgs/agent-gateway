@@ -144,3 +144,22 @@ services:
 - **멀티 워크스페이스**: 사용자별 격리된 workspace 폴더
 - **도구 결과 파일 첨부**: `[FILE:workspace/path]` 마커 감지 → Telegram 파일 전송
 - **권한 관리**: `ALLOWED_CHAT_IDS` 환경변수로 접근 제한
+
+---
+
+## 아이디어 백로그
+
+### 반복 알람
+- 현재 알람은 1회성(setTimeout). cron 표현식 또는 자연어("매일 오전 9시") 지원
+- `alarms` 테이블에 `repeat` 컬럼 추가 (`daily` | `weekly` | `weekdays` | null)
+- 발화 후 다음 fire_at 계산해서 재등록
+
+### URL 요약
+- 메시지에 일반 URL 포함 시 페이지 내용 fetch → 에이전트 프롬프트에 주입
+- 지도 URL 처리 패턴과 동일하게 `src/tools/` 에 추가
+- 긴 본문은 앞 N자만 잘라 주입 (토큰 절약)
+
+### 환율 계산기
+- `workspace/scripts/` 에 환율 조회 스크립트 추가 (공개 API 사용, 예: ExchangeRate-API)
+- 에이전트가 "100달러 얼마야" 요청 시 스크립트 호출
+- 주요 통화(USD, EUR, JPY, CNY) 캐시 (TTL 1시간)
