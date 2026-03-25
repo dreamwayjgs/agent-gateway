@@ -6,6 +6,8 @@ TOOLS_MEMO.md
 
 # runtime data
 data/
+data.db*
+sessions.json
 
 # workspace — runtime 파일은 제외, 지침/스크립트만 추적
 workspace/*
@@ -26,4 +28,5 @@ node_modules/
 
 # IDE
 .idea
+.claude/
 .DS_Store
