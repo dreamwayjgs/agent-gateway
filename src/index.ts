@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import { config } from "./config";
 import { runCodex, AgentTimeoutError as CodexTimeoutError } from "./agent/codex";
 import { runGemini, AgentTimeoutError as GeminiTimeoutError } from "./agent/gemini";
+import { runVibe, AgentTimeoutError as VibeTimeoutError } from "./agent/vibe";
 import { getSession, setSession, deleteSession } from "./agent/session";
 import { processTemplates, extractAlarms } from "./template";
 import { initAlarms } from "./alarm";
@@ -18,7 +19,6 @@ const TRIGGER_ALIASES = ["$ ", "% "];
 // 모든 메시지 저장
 bot.on("message", async (ctx, next) => {
   if (ctx.message.text) {
-    console.log("MSG", JSON.stringify(ctx.message));
     try {
       getDb().run(
         "INSERT INTO messages (chat_id, user_id, first_name, text, date, raw) VALUES (?, ?, ?, ?, ?, ?)",
@@ -108,8 +108,8 @@ bot.on("message:text", async (ctx) => {
   const hasTrigger = text.startsWith(trigger) || !!matchedAlias;
   const triggerLen = matchedAlias ? matchedAlias.length : trigger.length;
 
-  // 그룹챗: 트리거도 없고 지도 링크도 없으면 저장만 하고 종료
-  if (isGroup && !hasTrigger && !isMapMessage) return;
+  // 트리거도 없고 지도 링크도 없으면 저장만 하고 종료
+  if (!hasTrigger && !isMapMessage) return;
 
   let mapMeta = "";
   const naverUrl = text.match(/https?:\/\/naver\.me\/\S+/)?.[0];
@@ -169,15 +169,20 @@ bot.on("message:text", async (ctx) => {
 
   let resumeId: string | undefined;
   try {
-    resumeId = getSession(sessionKey) ?? undefined;
+    resumeId = getSession(sessionKey, config.agentBackend) ?? undefined;
   } catch (err) {
     console.error("세션 조회 실패:", err);
   }
+
+  await ctx.replyWithChatAction("typing").catch(() => { });
 
   let result: { response: string; sessionId: string };
   try {
     if (config.agentBackend === "gemini") {
       const r = await runGemini(finalPrompt, resumeId);
+      result = { response: r.response, sessionId: r.sessionId };
+    } else if (config.agentBackend === "vibe") {
+      const r = await runVibe(finalPrompt, resumeId);
       result = { response: r.response, sessionId: r.sessionId };
     } else {
       const r = await runCodex(finalPrompt, resumeId);
@@ -185,7 +190,7 @@ bot.on("message:text", async (ctx) => {
     }
   } catch (err) {
     console.error(err);
-    if (err instanceof CodexTimeoutError || err instanceof GeminiTimeoutError) {
+    if (err instanceof CodexTimeoutError || err instanceof GeminiTimeoutError || err instanceof VibeTimeoutError) {
       return ctx.reply("응답 시간이 너무 오래 걸려 중단했습니다.");
     }
     return ctx.reply("에이전트 실행 중 오류가 발생했습니다.");
@@ -193,7 +198,7 @@ bot.on("message:text", async (ctx) => {
 
   try {
     if (result.sessionId && result.sessionId !== resumeId) {
-      setSession(sessionKey, result.sessionId);
+      setSession(sessionKey, result.sessionId, config.agentBackend);
     }
   } catch (err) {
     console.error("세션 저장 실패:", err);

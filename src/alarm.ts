@@ -42,13 +42,16 @@ export function initAlarms(bot: Bot): void {
   }, 5 * 60_000);
 }
 
+const MAX_TIMEOUT_MS = 2 ** 31 - 1; // ~24.8일, setTimeout 32비트 한계
+
 function scheduleAlarm(id: number, fireAt: number, chatId: number, content: string): void {
   const delay = fireAt * 1000 - Date.now();
   if (delay <= 0) {
     fire(id, chatId, content);
-  } else {
+  } else if (delay <= MAX_TIMEOUT_MS) {
     setTimeout(() => fire(id, chatId, content), delay);
   }
+  // 초과 시 safety-net 폴링(5분)에 위임
 }
 
 function fire(id: number, chatId: number, content: string): void {

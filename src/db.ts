@@ -51,6 +51,13 @@ const MIGRATIONS: { name: string; sql: string }[] = [
       );
     `,
   },
+  {
+    name: "004_sessions_backend",
+    sql: `
+      DELETE FROM sessions;
+      ALTER TABLE sessions ADD COLUMN backend TEXT NOT NULL DEFAULT 'codex';
+    `,
+  },
 ];
 
 let _db: Database | null = null;
