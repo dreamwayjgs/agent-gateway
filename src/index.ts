@@ -38,12 +38,64 @@ bot.on("message", async (ctx, next) => {
   await next();
 });
 
+type MediaGroupEntry = {
+  ctx: any;
+  telegramFileId: string;
+  fileName: string;
+  mimeType: string | undefined;
+};
+type MediaGroupBuffer = {
+  caption: string | null;
+  files: MediaGroupEntry[];
+  timer: ReturnType<typeof setTimeout>;
+};
+const mediaGroupBuffers = new Map<string, MediaGroupBuffer>();
+
+async function flushMediaGroup(groupId: string) {
+  const buf = mediaGroupBuffers.get(groupId);
+  if (!buf) return;
+  mediaGroupBuffers.delete(groupId);
+
+  const { caption, files } = buf;
+  for (const { ctx, telegramFileId, fileName, mimeType } of files) {
+    const chatId = ctx.message.chat.id;
+    const uploadedBy = ctx.message.from?.first_name ?? null;
+    const uploadedAt = ctx.message.date;
+    try {
+      const saved = await downloadAndSaveFile(
+        bot, telegramFileId, fileName, mimeType,
+        chatId, uploadedBy, caption, uploadedAt
+      );
+      const memoNote = caption ? ` (메모: ${caption})` : " — 메모: ## 뒤에 내용을 입력하세요.";
+      console.log(`[파일 저장] #${saved.id} ${saved.localPath}`);
+      await ctx.reply(`📎 저장됨: ${fileName}${memoNote}`);
+    } catch (err) {
+      console.error("파일 저장 실패:", err);
+      await ctx.reply("파일 저장 중 오류가 발생했습니다.");
+    }
+  }
+}
+
 async function handleFileMessage(
   ctx: any,
   telegramFileId: string,
   fileName: string,
   mimeType: string | undefined
 ) {
+  const groupId = ctx.message.media_group_id as string | undefined;
+
+  if (groupId) {
+    const caption = ctx.message.caption as string | undefined;
+    let buf = mediaGroupBuffers.get(groupId);
+    if (!buf) {
+      buf = { caption: null, files: [], timer: setTimeout(() => flushMediaGroup(groupId), 500) };
+      mediaGroupBuffers.set(groupId, buf);
+    }
+    if (caption) buf.caption = caption;
+    buf.files.push({ ctx, telegramFileId, fileName, mimeType });
+    return;
+  }
+
   const chatId = ctx.message.chat.id;
   const uploadedBy = ctx.message.from?.first_name ?? null;
   const uploadedAt = ctx.message.date;
