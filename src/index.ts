@@ -183,6 +183,7 @@ bot.on("message:text", async (ctx) => {
     ? `[지도 링크 감지]${mapMeta}\n${text}`
     : hasTrigger ? `${text.slice(triggerLen).trimStart()}${mapMeta}` : text;
   const preview = prompt.slice(0, 160);
+  const reqStart = Date.now();
   console.log(`[${name}${isGroup ? " (그룹)" : ""}] ${preview}`);
 
   if (config.noAgent) return ctx.reply("저장됨");
@@ -247,6 +248,7 @@ bot.on("message:text", async (ctx) => {
     }
     return ctx.reply("에이전트 실행 중 오류가 발생했습니다.");
   }
+  console.log(`[${name}${isGroup ? " (그룹)" : ""}] ${Date.now() - reqStart}ms`);
 
   try {
     if (result.sessionId && result.sessionId !== resumeId) {
