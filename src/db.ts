@@ -58,6 +58,31 @@ const MIGRATIONS: { name: string; sql: string }[] = [
       ALTER TABLE sessions ADD COLUMN backend TEXT NOT NULL DEFAULT 'codex';
     `,
   },
+  {
+    name: "005_chat_settings",
+    sql: `
+      CREATE TABLE IF NOT EXISTS chat_settings (
+        chat_id    INTEGER PRIMARY KEY,
+        settings   TEXT NOT NULL DEFAULT '{}',
+        updated_at INTEGER NOT NULL DEFAULT 0
+      );
+    `,
+  },
+  {
+    name: "006_voice_logs",
+    sql: `
+      CREATE TABLE IF NOT EXISTS voice_logs (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        chat_id     INTEGER NOT NULL,
+        file_id     TEXT NOT NULL,
+        local_path  TEXT NOT NULL,
+        transcript  TEXT NOT NULL,
+        translation TEXT NOT NULL,
+        target_lang TEXT NOT NULL,
+        created_at  INTEGER NOT NULL
+      );
+    `,
+  },
 ];
 
 let _db: Database | null = null;

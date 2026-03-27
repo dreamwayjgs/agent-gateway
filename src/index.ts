@@ -9,6 +9,8 @@ import { processTemplates, extractAlarms } from "./template";
 import { initAlarms } from "./alarm";
 import { getHelpText } from "./help";
 import { downloadAndSaveFile, tryUpdateMemo, extractFileRefs } from "./files";
+import { getChatSettings, updateChatSettings } from "./chat-settings";
+import { transcribeAndTranslate, saveVoiceLog, LANG_LABELS } from "./translate";
 import { fetchNaverPlaceInfo } from "./tools/navermap";
 import { fetchKakaoPlaceInfo } from "./tools/kakaomap";
 import { fetchTmapPlaceInfo } from "./tools/tmap";
@@ -125,6 +127,46 @@ bot.on("message:photo", async (ctx) => {
   await handleFileMessage(ctx, photo.file_id, `photo_${ctx.message.date}.jpg`, "image/jpeg");
 });
 
+bot.on("message:voice", async (ctx) => {
+  const chatId = ctx.message.chat.id;
+  const settings = getChatSettings(chatId);
+  if (!settings.translation?.enabled) return;
+
+  const target = settings.translation.target;
+  const voice = ctx.message.voice;
+
+  // 파일 다운로드
+  let localPath: string;
+  try {
+    const tgFile = await bot.api.getFile(voice.file_id);
+    if (!tgFile.file_path) throw new Error("file_path not available");
+    const url = `https://api.telegram.org/file/bot${config.telegramToken}/${tgFile.file_path}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`다운로드 실패: ${res.status}`);
+
+    const { join } = await import("node:path");
+    const { mkdir } = await import("node:fs/promises");
+    const dir = join(config.workspaceDir, "voice", String(chatId));
+    await mkdir(dir, { recursive: true });
+    localPath = join(dir, `${ctx.message.date}_voice.ogg`);
+    await Bun.write(localPath, await res.arrayBuffer());
+  } catch (err) {
+    console.error("[음성] 다운로드 실패:", err);
+    return ctx.reply("음성 파일 다운로드에 실패했습니다.");
+  }
+
+  await ctx.replyWithChatAction("typing").catch(() => {});
+
+  try {
+    const result = await transcribeAndTranslate(localPath, target, config.geminiApiKey);
+    saveVoiceLog(chatId, voice.file_id, localPath, result, target);
+    await ctx.reply(`${result.transcript}\n\n${result.translation}`);
+  } catch (err) {
+    console.error("[음성] 번역 실패:", err);
+    await ctx.reply("음성 번역 중 오류가 발생했습니다.");
+  }
+});
+
 bot.on("message:text", async (ctx) => {
   const chatId = ctx.message.chat.id;
   const text = ctx.message.text;
@@ -150,6 +192,29 @@ bot.on("message:text", async (ctx) => {
       return ctx.reply("세션 초기화 중 오류가 발생했습니다.");
     }
     return ctx.reply("세션을 초기화했습니다.");
+  }
+
+  // 번역 명령 인터셉트 (% 번역 on [lang] / off)
+  const translationCmdAlias = TRIGGER_ALIASES.find((a) => text.startsWith(a));
+  if (translationCmdAlias) {
+    const body = text.slice(translationCmdAlias.length).trimStart();
+    const onMatch = body.match(/^번역\s+(on|시작)(?:\s+(\w+))?$/i);
+    const offMatch = body.match(/^번역\s+(off|종료)$/i);
+
+    if (onMatch) {
+      if (!config.geminiApiKey) {
+        return ctx.reply("번역 기능을 사용하려면 GEMINI_API_KEY가 필요합니다.");
+      }
+      const target = onMatch[2] ?? "en";
+      updateChatSettings(chatId, { translation: { enabled: true, target } });
+      const label = LANG_LABELS[target] ?? target;
+      return ctx.reply(`번역 모드 켜짐 (한국어 ↔ ${label})`);
+    }
+
+    if (offMatch) {
+      updateChatSettings(chatId, { translation: { enabled: false, target: "en" } });
+      return ctx.reply("번역 모드 꺼짐");
+    }
   }
 
   const MAP_DOMAINS = ["naver.me", "map.naver.com", "tmap.life", "kko.to", "map.kakao.com"];

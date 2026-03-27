@@ -10,4 +10,5 @@ export const config = {
   noAgent: process.env.NO_AGENT === "true",
   agentBackend: process.env.AGENT_BACKEND ?? "codex",
   timezone: process.env.TZ ?? "Asia/Seoul",
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
 };
