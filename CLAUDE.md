@@ -1,4 +1,3 @@
-
 Default to using Bun instead of Node.js.
 
 - Use `bun <file>` instead of `node <file>` or `ts-node <file>`
@@ -35,72 +34,30 @@ test("hello world", () => {
 
 Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
 
-Server:
+---
 
-```ts#index.ts
-import index from "./index.html"
+## Three Man Team
 
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
+| 이름 | 역할 | 도구 | 역할 파일 |
+|------|------|------|-----------|
+| 앨리스 | Architect | Claude | `agents/ARCHITECT.md` |
+| 밥 | Builder | Claude | `agents/BUILDER.md` |
+| 리처드 | Reviewer (1차) | Claude | `agents/REVIEWER.md` |
+| 로저 | Second Reviewer (2차) | Codex | `AGENTS.md` |
+| 로먼 | Third Reviewer (3차) | Gemini | `GEMINI.md` |
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+### 활성 리뷰어
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
+- 리처드 (1차)
+- 로저 (2차)
+- 로먼 (3차)
 
-With the following `frontend.tsx`:
+### Handoff 파일 (`agents/handoff/` 또는 프로젝트 루트)
 
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+| 파일 | 작성자 → 독자 |
+|------|--------------|
+| `ARCHITECT-BRIEF.md` | 앨리스 → 밥 |
+| `REVIEW-REQUEST.md` | 밥 → 리처드 |
+| `REVIEW-FEEDBACK.md` | 리처드 → 로저 → 로먼 → 밥 |
+| `BUILD-LOG.md` | 공유 기록, 앨리스 소유 |
+| `SESSION-CHECKPOINT.md` | 앨리스가 세션 종료 시 작성 |
