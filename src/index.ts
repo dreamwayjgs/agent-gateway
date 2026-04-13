@@ -362,4 +362,4 @@ bot.on("message:text", async (ctx) => {
 
 initAlarms(bot);
 bot.start();
-console.log(`Bot started (trigger: "${config.botTriggerName}")`);
+console.log(`Bot started (trigger: "${config.botTriggerName}", backend: ${config.agentBackend})`);

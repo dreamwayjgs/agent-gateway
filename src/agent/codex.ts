@@ -16,6 +16,7 @@ export function runCodex(prompt: string, resumeId?: string): Promise<CodexResult
       ? ["exec", "resume", ...commonFlags, resumeId, prompt]
       : ["exec", ...commonFlags, prompt];
 
+    console.log(`[codex] spawn: ${["codex", ...args.slice(0, 2)].join(" ")} resume=${resumeId ?? "none"}`);
     const proc = spawn("codex", args, {
       cwd: process.env.WORKSPACE_DIR ?? "./workspace",
       env: process.env,
@@ -58,8 +59,10 @@ export function runCodex(prompt: string, resumeId?: string): Promise<CodexResult
     proc.on("close", (code) => {
       clearTimeout(timer);
       if (!response) {
+        console.error(`[codex] exit code=${code} stderr=${stderr.join("").slice(0, 500)}`);
         reject(new Error(`codex exited with code ${code}. stderr: ${stderr.join("")}`));
       } else {
+        console.log(`[codex] done threadId=${threadId}`);
         resolve({ response, threadId });
       }
     });
