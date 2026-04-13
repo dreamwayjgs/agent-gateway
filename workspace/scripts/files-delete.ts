@@ -2,7 +2,7 @@
 // 사용법: bun scripts/files-delete.ts <chat_id> <id>
 import { Database } from "bun:sqlite";
 import { rename, mkdir } from "node:fs/promises";
-import { join, basename } from "node:path";
+import { join, basename, resolve } from "node:path";
 
 const [chatId, fileId] = process.argv.slice(2);
 if (!chatId || !fileId) {
@@ -10,7 +10,7 @@ if (!chatId || !fileId) {
   process.exit(1);
 }
 
-const dbPath = process.env.DB_FILE ?? "../data.db";
+const dbPath = resolve(import.meta.dir, "../..", process.env.DB_FILE ?? "data/data.db");
 const db = new Database(dbPath);
 
 const row = db

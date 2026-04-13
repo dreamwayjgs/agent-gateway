@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // 사용법: bun scripts/files-search.ts <chat_id> <검색어>
 import { Database } from "bun:sqlite";
+import { resolve } from "node:path";
 
 const [chatId, ...queryParts] = process.argv.slice(2);
 const query = queryParts.join(" ");
@@ -10,7 +11,7 @@ if (!chatId || !query) {
   process.exit(1);
 }
 
-const dbPath = process.env.DB_FILE ?? "../data.db";
+const dbPath = resolve(import.meta.dir, "../..", process.env.DB_FILE ?? "data/data.db");
 const db = new Database(dbPath, { readonly: true });
 
 const like = `%${query}%`;
@@ -31,9 +32,10 @@ if (rows.length === 0) {
 } else {
   for (const r of rows) {
     const date = new Date(r.uploaded_at * 1000).toISOString().slice(0, 10);
-    const name = r.file_name ?? "(이름 없음)";
-    const memo = r.memo ?? "(메모 없음)";
-    const by = r.uploaded_by ?? "unknown";
+    const esc = (s: string) => s.replace(/\t/g, " ").replace(/\r?\n/g, "\\n");
+    const name = esc(r.file_name ?? "(이름 없음)");
+    const memo = esc(r.memo ?? "(메모 없음)");
+    const by = esc(r.uploaded_by ?? "unknown");
     console.log(`#${r.id}\t${name}\t${memo}\t${by}\t${date}`);
   }
 }
