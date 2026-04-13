@@ -13,5 +13,5 @@ services:
         max-file: "3"
     volumes:
       - ./data:/app/data
-      - ./workspace/files:/app/workspace/files
+      - ./workspace:/app/workspace
       - ./data/codex-auth:/root/.codex
