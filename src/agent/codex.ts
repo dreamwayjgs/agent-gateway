@@ -20,6 +20,7 @@ export function runCodex(prompt: string, resumeId?: string): Promise<CodexResult
     const proc = spawn("codex", args, {
       cwd: process.env.WORKSPACE_DIR ?? "./workspace",
       env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     const timer = setTimeout(() => {
