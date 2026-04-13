@@ -9,6 +9,6 @@ export const config = {
   contextMaxMessages: Number(process.env.CONTEXT_MAX_MESSAGES ?? 5),
   noAgent: process.env.NO_AGENT === "true",
   agentBackend: process.env.AGENT_BACKEND ?? "codex",
-  timezone: process.env.TZ ?? "Asia/Seoul",
+  timezone: process.env.BOT_TIMEZONE ?? "Asia/Seoul",
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
 };
