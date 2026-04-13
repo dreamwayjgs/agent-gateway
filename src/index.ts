@@ -172,6 +172,7 @@ bot.on("message:text", async (ctx) => {
   const text = ctx.message.text;
   const name = ctx.message.from.first_name;
   const isGroup = ctx.message.chat.type === "group" || ctx.message.chat.type === "supergroup";
+  console.log(`[recv] ${name} (${chatId}): ${text.slice(0, 80)}`);
 
   const sessionKey = `chat:${chatId}`;
 
