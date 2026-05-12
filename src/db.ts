@@ -83,6 +83,13 @@ const MIGRATIONS: { name: string; sql: string }[] = [
       );
     `,
   },
+  {
+    name: "007_alarm_repeat",
+    sql: `
+      ALTER TABLE alarms ADD COLUMN repeat TEXT;
+      ALTER TABLE alarms ADD COLUMN repeat_dom INTEGER;
+    `,
+  },
 ];
 
 let _db: Database | null = null;

@@ -15,10 +15,10 @@ const db = new Database(dbPath, { readonly: true });
 const now = Math.floor(Date.now() / 1000);
 const rows = db
   .query<
-    { id: number; fire_at: number; content: string },
+    { id: number; fire_at: number; content: string; repeat: string | null },
     [number, number]
   >(
-    `SELECT id, fire_at, content
+    `SELECT id, fire_at, content, repeat
      FROM alarms
      WHERE chat_id = ? AND sent = 0 AND fire_at > ?
      ORDER BY fire_at ASC`
@@ -35,6 +35,7 @@ if (rows.length === 0) {
       hour12: false,
     });
     const content = r.content.replace(/\t/g, " ").replace(/\r?\n/g, "\\n");
-    console.log(`#${r.id}\t${timeStr}\t${content}`);
+    const repeat = r.repeat ?? "-";
+    console.log(`#${r.id}\t${timeStr}\t${repeat}\t${content}`);
   }
 }
