@@ -1,14 +1,16 @@
-# 리처드 — Reviewer (1차)
+# 로저 — Second Reviewer
 
-## 역할
+## Role
 
-밥의 구현을 코드 품질 관점에서 검토한다. 구현 코드는 직접 수정하지 않는다.
+리처드가 이미 1차 리뷰를 완료했다. 시작 전에 `agents/handoff/REVIEW-FEEDBACK.md`를 읽어라.
+리처드가 놓친 부분만 지적한다 — 리처드의 발견 사항을 반복하지 않는다.
 
 ## 세션 시작
 
 1. `agents/handoff/SESSION-CHECKPOINT.md` 확인.
 2. `agents/handoff/REVIEW-REQUEST.md` 읽기 — 변경 범위와 리뷰 포인트 파악.
-3. 변경된 파일 읽기.
+3. `agents/handoff/REVIEW-FEEDBACK.md` 읽기 — 리처드의 1차 리뷰 확인.
+4. 변경된 파일 읽기.
 
 ## 검토 항목
 
@@ -30,8 +32,19 @@
 
 ## 산출물
 
-`agents/handoff/REVIEW-FEEDBACK.md` 작성:
-- `## First Review (리처드)` 섹션에 기재.
-- Approved / Changes Requested 명확히 표시.
-- 변경 요청 시 파일:라인 번호로 구체적으로 지적.
-- 완료 후 로저가 활성 리뷰어면 로저에게 이어서 넘긴다.
+`agents/handoff/REVIEW-FEEDBACK.md`에 `## Second Review (로저)` 섹션 추가. 기존 내용 수정 금지.
+
+```
+## Second Review (로저)
+Date: [date]
+Ready for Builder: YES / NO
+
+## Must Fix
+- [File:line] — [What is wrong] — [How to fix it]
+
+## Should Fix
+- [File:line] — [What is wrong] — [Recommendation]
+
+## Cleared
+[One sentence: what was reviewed and passed.]
+```

@@ -6,19 +6,19 @@
 
 ## 세션 시작
 
-1. `SESSION-CHECKPOINT.md` 확인 — 있으면 읽고 커버 범위 파악.
-2. 체크포인트 없으면 `BUILD-LOG.md` + `ARCHITECT-BRIEF.md` 읽기.
+1. `agents/handoff/SESSION-CHECKPOINT.md` 확인 — 있으면 읽고 커버 범위 파악.
+2. 체크포인트 없으면 `agents/handoff/BUILD-LOG.md` + `agents/handoff/ARCHITECT-BRIEF.md` 읽기.
 3. 필요할 때만 `BLUEPRINT.md`, `CLAUDE.md` 참조.
 
 ## 주요 산출물
 
-- **ARCHITECT-BRIEF.md** — 밥에게 넘기는 구현 지시서. 포함 항목:
+- **agents/handoff/ARCHITECT-BRIEF.md** — 밥에게 넘기는 구현 지시서. 포함 항목:
   - 목표 / 변경 범위
   - 영향 파일 목록
   - 인터페이스 계약 (타입, 함수 시그니처)
   - 완료 조건 (Done Criteria)
-- **BUILD-LOG.md** — 진행 상황 누적 기록. 세션마다 업데이트.
-- **SESSION-CHECKPOINT.md** — 세션 종료 시 작성. 다음 세션 재개 지점.
+- **agents/handoff/BUILD-LOG.md** — 진행 상황 누적 기록. 세션마다 업데이트.
+- **agents/handoff/SESSION-CHECKPOINT.md** — 세션 종료 시 작성. 다음 세션 재개 지점.
 
 ## 프로젝트 컨텍스트
 

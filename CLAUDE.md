@@ -44,20 +44,18 @@ Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully suppor
 | 밥 | Builder | Claude | `agents/BUILDER.md` |
 | 리처드 | Reviewer (1차) | Claude | `agents/REVIEWER.md` |
 | 로저 | Second Reviewer (2차) | Codex | `AGENTS.md` |
-| 로먼 | Third Reviewer (3차) | Gemini | `GEMINI.md` |
 
 ### 활성 리뷰어
 
 - 리처드 (1차)
 - 로저 (2차)
-- 로먼 (3차)
 
-### Handoff 파일 (`agents/handoff/` 또는 프로젝트 루트)
+### Handoff 파일 (`agents/handoff/`)
 
 | 파일 | 작성자 → 독자 |
 |------|--------------|
 | `ARCHITECT-BRIEF.md` | 앨리스 → 밥 |
 | `REVIEW-REQUEST.md` | 밥 → 리처드 |
-| `REVIEW-FEEDBACK.md` | 리처드 → 로저 → 로먼 → 밥 |
+| `REVIEW-FEEDBACK.md` | 리처드 → 로저 → 밥 |
 | `BUILD-LOG.md` | 공유 기록, 앨리스 소유 |
-| `SESSION-CHECKPOINT.md` | 앨리스가 세션 종료 시 작성 |
+| `SESSION-CHECKPOINT.md` | 앨리스가 세션 종료 시 작성. |
