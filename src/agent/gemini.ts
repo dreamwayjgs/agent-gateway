@@ -18,6 +18,7 @@ export function runGemini(prompt: string, resumeId?: string): Promise<GeminiResu
       cwd: process.env.WORKSPACE_DIR ?? "./workspace",
       env: process.env,
     });
+    proc.stdout.setEncoding("utf8");
 
     const timer = setTimeout(() => {
       proc.kill();
@@ -27,22 +28,30 @@ export function runGemini(prompt: string, resumeId?: string): Promise<GeminiResu
     let sessionId = "";
     const responseParts: string[] = [];
     const stderr: string[] = [];
+    let buf = "";
 
-    proc.stdout.on("data", (chunk: Buffer) => {
-      for (const line of chunk.toString().split("\n")) {
+    const processLine = (trimmed: string) => {
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(trimmed);
+      } catch {
+        return;
+      }
+      if (msg.type === "init") {
+        sessionId = msg.session_id as string;
+      } else if (msg.type === "message" && msg.role === "assistant" && msg.delta === true) {
+        responseParts.push(msg.content as string);
+      }
+    };
+
+    proc.stdout.on("data", (chunk: string) => {
+      buf += chunk;
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-        let msg: Record<string, unknown>;
-        try {
-          msg = JSON.parse(trimmed);
-        } catch {
-          continue;
-        }
-        if (msg.type === "init") {
-          sessionId = msg.session_id as string;
-        } else if (msg.type === "message" && msg.role === "assistant" && msg.delta === true) {
-          responseParts.push(msg.content as string);
-        }
+        processLine(trimmed);
       }
     });
 
@@ -51,6 +60,7 @@ export function runGemini(prompt: string, resumeId?: string): Promise<GeminiResu
     });
 
     proc.on("close", (code) => {
+      if (buf.trim()) processLine(buf.trim());
       clearTimeout(timer);
       const response = responseParts.join("");
       if (!response) {

@@ -35,6 +35,7 @@ export function runVibe(prompt: string, resumeId?: string): Promise<VibeResult> 
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    proc.stdout.setEncoding("utf8");
 
     const timer = setTimeout(() => {
       proc.kill();
@@ -43,20 +44,28 @@ export function runVibe(prompt: string, resumeId?: string): Promise<VibeResult> 
 
     let response = "";
     const stderr: string[] = [];
+    let buf = "";
 
-    proc.stdout.on("data", (chunk: Buffer) => {
-      for (const line of chunk.toString().split("\n")) {
+    const processLine = (trimmed: string) => {
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(trimmed);
+      } catch {
+        return;
+      }
+      if (msg.role === "assistant") {
+        response = msg.content as string;
+      }
+    };
+
+    proc.stdout.on("data", (chunk: string) => {
+      buf += chunk;
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-        let msg: Record<string, unknown>;
-        try {
-          msg = JSON.parse(trimmed);
-        } catch {
-          continue;
-        }
-        if (msg.role === "assistant") {
-          response = msg.content as string;
-        }
+        processLine(trimmed);
       }
     });
 
@@ -65,6 +74,7 @@ export function runVibe(prompt: string, resumeId?: string): Promise<VibeResult> 
     });
 
     proc.on("close", async (code) => {
+      if (buf.trim()) processLine(buf.trim());
       clearTimeout(timer);
       if (!response) {
         reject(new Error(`vibe exited with code ${code}. stderr: ${stderr.join("")}`));
