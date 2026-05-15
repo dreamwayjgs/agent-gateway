@@ -21,7 +21,7 @@ if (!sql || sql === "--help" || sql === "-h") {
   process.exit(0);
 }
 
-let params: unknown[] = [];
+let params: import("bun:sqlite").SQLQueryBindings[] = [];
 if (rawParams) {
   const parsed = JSON.parse(rawParams);
   if (!Array.isArray(parsed)) {

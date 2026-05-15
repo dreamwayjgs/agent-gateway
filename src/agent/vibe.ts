@@ -18,8 +18,7 @@ async function getLatestSessionId(): Promise<string> {
   const entries = await readdir(sessionDir);
   const folders = entries.filter((e) => e.startsWith("session_")).sort();
   if (folders.length === 0) return "";
-  const latest = folders[folders.length - 1];
-  return latest.split("_").at(-1) ?? "";
+  return (folders.at(-1) ?? "").split("_").at(-1) ?? "";
 }
 
 const isVibeSessionId = (id: string) => /^[0-9a-f]{8}$/.test(id);

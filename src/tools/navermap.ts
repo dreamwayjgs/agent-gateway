@@ -11,7 +11,7 @@ export async function fetchNaverPlaceInfo(url: string): Promise<NaverPlaceInfo |
 
     const placeMatch = location.match(/\/place\/(\d+)/);
     if (!placeMatch) return null;
-    const placeId = placeMatch[1];
+    const placeId = placeMatch[1]!;
 
     // 주소 API 호출
     const apiRes = await fetch(`https://map.naver.com/p/api/place/address/${placeId}`, {
