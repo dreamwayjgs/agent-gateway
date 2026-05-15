@@ -324,7 +324,7 @@ bot.on("message:text", async (ctx) => {
     console.error("세션 저장 실패:", err);
   }
 
-  const { cleaned, refs } = extractFileRefs(result.response);
+  const { cleaned, refs } = extractFileRefs(result.response, chatId);
   const processed = processTemplates(extractAlarms(cleaned, chatId));
   const messages: string[] = [];
   let textBuffer: string[] = [];
@@ -353,7 +353,19 @@ bot.on("message:text", async (ctx) => {
   for (const ref of refs) {
     try {
       const data = await Bun.file(ref.localPath).bytes();
-      await ctx.replyWithDocument(new InputFile(data, ref.fileName));
+      const file = new InputFile(data, ref.fileName);
+      const mime = ref.mimeType ?? "";
+      if (mime === "image/gif") {
+        await ctx.replyWithAnimation(file);
+      } else if (mime.startsWith("image/")) {
+        await ctx.replyWithPhoto(file);
+      } else if (mime.startsWith("video/")) {
+        await ctx.replyWithVideo(file);
+      } else if (mime.startsWith("audio/")) {
+        await ctx.replyWithAudio(file);
+      } else {
+        await ctx.replyWithDocument(file);
+      }
     } catch (err) {
       console.error(`파일 전송 실패 #${ref.id}:`, err);
       await ctx.reply(`파일 전송 실패: ${ref.fileName}`);

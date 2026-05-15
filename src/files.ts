@@ -43,20 +43,20 @@ export async function downloadAndSaveFile(
   return { id: Number(result.lastInsertRowid), fileName, localPath };
 }
 
-export type FileRef = { id: number; localPath: string; fileName: string };
+export type FileRef = { id: number; localPath: string; fileName: string; mimeType: string | null };
 
 // {{파일:id}} 추출 후 텍스트에서 제거, 파일 정보 반환
 const FILE_REF_RE = /\{\{파일:(\d+)\}\}/g;
 
-export function extractFileRefs(text: string): { cleaned: string; refs: FileRef[] } {
+export function extractFileRefs(text: string, chatId: number): { cleaned: string; refs: FileRef[] } {
   const refs: FileRef[] = [];
   const cleaned = text.replace(FILE_REF_RE, (_, idStr) => {
     const row = getDb()
-      .query<{ local_path: string; file_name: string | null }, [number]>(
-        "SELECT local_path, file_name FROM files WHERE id = ?"
+      .query<{ local_path: string; file_name: string | null; mime_type: string | null }, [number, number]>(
+        "SELECT local_path, file_name, mime_type FROM files WHERE id = ? AND chat_id = ?"
       )
-      .get(Number(idStr));
-    if (row) refs.push({ id: Number(idStr), localPath: row.local_path, fileName: row.file_name ?? `file_${idStr}` });
+      .get(Number(idStr), chatId);
+    if (row) refs.push({ id: Number(idStr), localPath: row.local_path, fileName: row.file_name ?? `file_${idStr}`, mimeType: row.mime_type });
     return "";
   });
   return { cleaned: cleaned.trim(), refs };
