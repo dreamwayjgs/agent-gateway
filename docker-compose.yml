@@ -4,14 +4,14 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - DB_FILE=/app/data/data.db
-      - WORKSPACE_DIR=/app/workspace
+      - DB_FILE=/home/bun/data/data.db
+      - WORKSPACE_DIR=/home/bun/workspace
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
     volumes:
-      - ./data:/app/data
-      - ./workspace:/app/workspace
-      - ./data/codex-auth:/root/.codex
+      - ./data:/home/bun/data
+      - ./workspace:/home/bun/workspace
+      - ./data/codex-auth:/home/bun/.codex

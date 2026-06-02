@@ -15,6 +15,9 @@ RUN bun install --frozen-lockfile
 
 COPY . .
 
-RUN mkdir -p data workspace/files
+RUN mkdir -p /home/bun/data /home/bun/workspace/files && \
+    chown -R bun:bun /app /home/bun
+
+USER bun
 
 CMD ["bun", "src/index.ts"]
