@@ -32,6 +32,13 @@ export function getHelpText(aliases: string[] = []): string {
 "${trigger} 가족관계증명서 찾아줘"
 "${trigger} 엄마가 올린 파일 보여줘"
 
+🚗 방문차량 주차 등록
+"${trigger} 내일 하루 12가3456 주차 등록해줘"
+"${trigger} 오늘부터 모레까지 53주5427 등록해줘"
+"${trigger} 53주5427 오늘 건 취소해줘"
+"${trigger} 주차 크레딧 얼마야"
+"${trigger} 등록된 방문차량 보여줘"
+
 💬 자유 대화
 "${trigger} ..."로 시작하면 무엇이든 물어볼 수 있습니다.
 ${aliasNote}

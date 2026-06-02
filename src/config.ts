@@ -20,4 +20,7 @@ export const config = {
   agentBackend: process.env.AGENT_BACKEND ?? "codex",
   timezone: validateTimezone(process.env.BOT_TIMEZONE ?? "Asia/Seoul"),
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  guroId: process.env.GURO_ID ?? "",
+  guroPassword: process.env.GURO_PASSWORD ?? "",
+  guroBaseUrl: process.env.GURO_BASE_URL ?? "http://guroyeonji2.iptime.org",
 };

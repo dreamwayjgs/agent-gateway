@@ -14,6 +14,7 @@ import { transcribeAndTranslate, saveVoiceLog, LANG_LABELS } from "./translate";
 import { fetchNaverPlaceInfo } from "./tools/navermap";
 import { fetchKakaoPlaceInfo } from "./tools/kakaomap";
 import { fetchTmapPlaceInfo } from "./tools/tmap";
+import { getGuroContext, processGuroTemplates } from "./tools/guro";
 
 const bot = new Bot(config.telegramToken);
 const TRIGGER_ALIASES = ["$ ", "% "];
@@ -286,6 +287,16 @@ bot.on("message:text", async (ctx) => {
   });
   finalPrompt = `[현재 시각: ${nowKst}] [채팅 ID: ${chatId}]\n\n${finalPrompt}`;
 
+  const PARKING_KEYWORDS = ["주차", "방문차량", "크레딧"];
+  if (PARKING_KEYWORDS.some((k) => prompt.includes(k))) {
+    try {
+      const guroCtx = await getGuroContext();
+      finalPrompt += `\n\n${guroCtx}`;
+    } catch (err) {
+      console.error("[주차] 컨텍스트 조회 실패:", err);
+    }
+  }
+
   let resumeId: string | undefined;
   try {
     resumeId = getSession(sessionKey, config.agentBackend) ?? undefined;
@@ -325,7 +336,8 @@ bot.on("message:text", async (ctx) => {
   }
 
   const { cleaned, refs } = extractFileRefs(result.response, chatId);
-  const processed = processTemplates(extractAlarms(cleaned, chatId));
+  const afterGuro = await processGuroTemplates(cleaned);
+  const processed = processTemplates(extractAlarms(afterGuro, chatId));
   const messages: string[] = [];
   let textBuffer: string[] = [];
 
