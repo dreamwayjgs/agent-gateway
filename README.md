@@ -1,15 +1,17 @@
 # agent-gateway
 
-Telegram 채팅으로 AI 에이전트(codex / gemini-cli / vibe 등)를 구동하는 경량 봇 게이트웨이.
+Telegram 채팅으로 AI 에이전트(codex / gemini-cli)를 구동하는 경량 봇 게이트웨이.
 
 ## 주요 기능
 
 - **AI 에이전트 연동** — CLI 기반 에이전트를 subprocess로 실행, 환경변수 하나로 백엔드 전환
 - **세션 유지** — 채팅/사용자별 대화 문맥 유지 (SQLite, TTL + 주기적 초기화)
 - **지도 링크 변환** — 네이버지도·카카오맵·티맵 단축 URL에서 주소 추출 → 세 서비스 링크 일괄 제공
-- **알람** — 자연어로 지정 시각 알림 예약
+- **알람** — 자연어로 지정 시각 알림 예약 (반복 알람 지원)
 - **파일 저장·검색** — 채팅에 올린 파일을 자동 저장, 메모 태그 및 자연어 검색
-- **그룹·DM 통합** — 그룹챗에서는 트리거 호출, DM은 항상 에이전트로 전달
+- **음성 번역** — 음성 메시지 전사 + 번역 (`% 번역 on [lang]` / `off` 로 토글)
+- **방문차량 주차** — 구로 아파트 방문차량 사전예약 등록·조회·삭제 (크레딧 확인)
+- **그룹·DM 통합** — 그룹챗·DM 모두 트리거 호출(또는 지도 링크)로 에이전트 전달, 그 외 메시지는 저장만
 
 ## 지원 AI 백엔드
 
@@ -17,7 +19,6 @@ Telegram 채팅으로 AI 에이전트(codex / gemini-cli / vibe 등)를 구동�
 |---|---|
 | `codex` (기본) | `@openai/codex`, `OPENAI_API_KEY` |
 | `gemini` | `@google/gemini-cli`, `GEMINI_API_KEY` |
-| `vibe` | `vibe`, `MISTRAL_API_KEY` |
 
 ## 시작하기
 
@@ -43,8 +44,8 @@ bun src/index.ts
 | 변수 | 기본값 | 설명 |
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | — | BotFather에서 발급 (필수) |
-| `AGENT_BACKEND` | `codex` | `codex` \| `gemini` \| `vibe` |
-| `BOT_TRIGGER_NAME` | `시리야` | 그룹챗 호출 트리거 |
+| `AGENT_BACKEND` | `codex` | `codex` \| `gemini` |
+| `BOT_TRIGGER_NAME` | `시리야` | 에이전트 호출 트리거 (그룹·DM 공통) |
 | `WORKSPACE_DIR` | `./workspace` | 에이전트 작업 디렉터리 |
 | `DB_FILE` | `./data/data.db` | SQLite 파일 경로 |
 | `SESSION_TTL_HOURS` | `24` | 세션 비활성 만료 시간 |
@@ -52,8 +53,12 @@ bun src/index.ts
 | `CONTEXT_MINUTES` | `5` | 프롬프트에 주입할 최근 메시지 시간 범위 |
 | `CONTEXT_MAX_MESSAGES` | `5` | 프롬프트에 주입할 최근 메시지 수 |
 | `TMAP_APP_KEY` | — | 티맵 링크 생성용 |
-| `TZ` | `Asia/Seoul` | 타임존 |
+| `GEMINI_API_KEY` | — | gemini 백엔드 / 음성 번역용 |
+| `BOT_TIMEZONE` | `Asia/Seoul` | 타임존 (응대 시각 기준) |
 | `NO_AGENT` | `false` | `true`로 설정 시 에이전트 미실행 (개발용) |
+| `GURO_ID` | — | 주차 시스템 로그인 ID |
+| `GURO_PASSWORD` | — | 주차 시스템 로그인 비밀번호 |
+| `GURO_BASE_URL` | `http://guroyeonji2.iptime.org` | 주차 시스템 베이스 URL |
 
 ## 사용법
 

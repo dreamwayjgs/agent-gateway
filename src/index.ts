@@ -3,7 +3,6 @@ import { getDb } from "./db";
 import { config } from "./config";
 import { runCodex, AgentTimeoutError as CodexTimeoutError } from "./agent/codex";
 import { runGemini, AgentTimeoutError as GeminiTimeoutError } from "./agent/gemini";
-import { runVibe, AgentTimeoutError as VibeTimeoutError } from "./agent/vibe";
 import { getSession, setSession, deleteSession } from "./agent/session";
 import { processTemplates, extractAlarms } from "./template";
 import { initAlarms } from "./alarm";
@@ -311,16 +310,13 @@ bot.on("message:text", async (ctx) => {
     if (config.agentBackend === "gemini") {
       const r = await runGemini(finalPrompt, resumeId);
       result = { response: r.response, sessionId: r.sessionId };
-    } else if (config.agentBackend === "vibe") {
-      const r = await runVibe(finalPrompt, resumeId);
-      result = { response: r.response, sessionId: r.sessionId };
     } else {
       const r = await runCodex(finalPrompt, resumeId);
       result = { response: r.response, sessionId: r.threadId };
     }
   } catch (err) {
     console.error(err);
-    if (err instanceof CodexTimeoutError || err instanceof GeminiTimeoutError || err instanceof VibeTimeoutError) {
+    if (err instanceof CodexTimeoutError || err instanceof GeminiTimeoutError) {
       return ctx.reply("응답 시간이 너무 오래 걸려 중단했습니다.");
     }
     return ctx.reply("에이전트 실행 중 오류가 발생했습니다.");
