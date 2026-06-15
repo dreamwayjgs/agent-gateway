@@ -31,7 +31,8 @@ if (rows.length === 0) {
   console.log("일치하는 파일이 없습니다.");
 } else {
   for (const r of rows) {
-    const date = new Date(r.uploaded_at * 1000).toISOString().slice(0, 10);
+    const tz = process.env.BOT_TIMEZONE ?? "Asia/Seoul";
+    const date = new Date(r.uploaded_at * 1000).toLocaleDateString("sv-SE", { timeZone: tz });
     const esc = (s: string) => s.replace(/\t/g, " ").replace(/\r?\n/g, "\\n");
     const name = esc(r.file_name ?? "(이름 없음)");
     const memo = esc(r.memo ?? "(메모 없음)");
