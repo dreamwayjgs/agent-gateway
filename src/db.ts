@@ -90,6 +90,12 @@ const MIGRATIONS: { name: string; sql: string }[] = [
       ALTER TABLE alarms ADD COLUMN repeat_dom INTEGER;
     `,
   },
+  {
+    name: "008_messages_role",
+    sql: `
+      ALTER TABLE messages ADD COLUMN role TEXT NOT NULL DEFAULT 'user';
+    `,
+  },
 ];
 
 let _db: Database | null = null;

@@ -34,7 +34,25 @@
 
 - `files-list <chat_id>` · `files-search <chat_id> <검색어>` · `files-delete <chat_id> <id>`
 - `alarms-list <chat_id>` · `alarms-delete <chat_id> <id>`
+- `messages-search <chat_id> <검색어> [최대건수]` — 과거 채팅 기록 검색
 - `check-db` — files 테이블 덤프
+
+## 과거 대화 검색
+
+채팅방의 모든 메시지(사용자 발화 + 너의 응답)는 DB에 저장된다. 과거 대화를 검색할 수 있다.
+
+```
+bun scripts/messages-search.ts <chat_id> <검색어> [최대건수]
+```
+
+- 출력 형식: `#id\t[role]\t이름\t날짜시각\t텍스트` (role=`user` 또는 `assistant`, 시각은 KST)
+- chat_id는 프롬프트 상단 `[채팅 ID: ...]` 값. 음수 그대로 전달.
+
+사용할 때:
+
+- 사용자가 "전에 ~라고 했잖아", "지난번에 얘기한 거", "내가 뭐라고 했지" 등 과거 대화를 참조하면 먼저 검색해 사실을 확인하고 답한다.
+- 주입된 `[최근 그룹 대화]` 컨텍스트로 부족할 때 보완 검색한다.
+- 추측하지 말고 검색 결과에 근거해 답한다. 없으면 "기록을 못 찾았다"고 말한다.
 
 ## 응답 형식
 

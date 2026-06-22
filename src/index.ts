@@ -263,7 +263,7 @@ bot.on("message:text", async (ctx) => {
       const since = Math.floor(Date.now() / 1000) - contextMins * 60;
       const rows = getDb().query<{ first_name: string | null; text: string; date: number }, [number, number, number]>(
         `SELECT first_name, text, date FROM messages
-         WHERE chat_id = ? AND date >= ? AND text NOT LIKE '${trigger}%' AND text NOT LIKE '$ %' AND text NOT LIKE '% %'
+         WHERE chat_id = ? AND role = 'user' AND date >= ? AND text NOT LIKE '${trigger}%' AND text NOT LIKE '$ %' AND text NOT LIKE '% %'
          ORDER BY date DESC LIMIT ?`
       ).all(chatId, since, contextMax).reverse();
 
@@ -329,6 +329,23 @@ bot.on("message:text", async (ctx) => {
     }
   } catch (err) {
     console.error("세션 저장 실패:", err);
+  }
+
+  try {
+    getDb().run(
+      "INSERT INTO messages (chat_id, user_id, first_name, text, date, raw, role) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [
+        chatId,
+        null,
+        config.botTriggerName,
+        result.response,
+        Math.floor(Date.now() / 1000),
+        JSON.stringify({ sessionId: result.sessionId, backend: config.agentBackend }),
+        "assistant",
+      ]
+    );
+  } catch (err) {
+    console.error("DB 응답 저장 실패:", err);
   }
 
   const { cleaned, refs } = extractFileRefs(result.response, chatId);
