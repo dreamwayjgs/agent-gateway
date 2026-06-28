@@ -1,4 +1,3 @@
-import { Bot, InputFile } from "grammy";
 import { getDb } from "./db";
 import { config } from "./config";
 import { runCodex, AgentTimeoutError as CodexTimeoutError } from "./agent/codex";
@@ -15,175 +14,112 @@ import { fetchNaverPlaceInfo } from "./tools/navermap";
 import { fetchKakaoPlaceInfo } from "./tools/kakaomap";
 import { fetchTmapPlaceInfo } from "./tools/tmap";
 import { getGuroContext, processGuroTemplates } from "./tools/guro";
+import { createMessenger } from "./messenger";
+import type { IncomingMsg, Messenger, OutFile } from "./messenger/types";
 
-const bot = new Bot(config.telegramToken);
 const TRIGGER_ALIASES = ["$ ", "% "];
 
-// 모든 메시지 저장
-bot.on("message", async (ctx, next) => {
-  if (ctx.message.text) {
-    try {
-      getDb().run(
-        "INSERT INTO messages (chat_id, user_id, first_name, text, date, raw) VALUES (?, ?, ?, ?, ?, ?)",
-        [
-          ctx.message.chat.id,
-          ctx.message.from?.id ?? null,
-          ctx.message.from?.first_name ?? null,
-          ctx.message.text,
-          ctx.message.date,
-          JSON.stringify(ctx.message),
-        ]
-      );
-    } catch (err) {
-      console.error("DB 메시지 저장 실패:", err);
-    }
+// 모든 텍스트 메시지 저장 (원본 동작: text 있을 때만 저장)
+function saveIncoming(msg: IncomingMsg): void {
+  if (msg.text == null) return;
+  try {
+    getDb().run(
+      "INSERT INTO messages (chat_id, user_id, first_name, text, date, raw) VALUES (?, ?, ?, ?, ?, ?)",
+      [
+        Number(msg.chatId),
+        msg.userId != null ? Number(msg.userId) : null,
+        msg.userName,
+        msg.text,
+        msg.date,
+        JSON.stringify(msg.raw),
+      ]
+    );
+  } catch (err) {
+    console.error("DB 메시지 저장 실패:", err);
   }
-  await next();
-});
+}
 
-type MediaGroupEntry = {
-  ctx: any;
-  telegramFileId: string;
-  fileName: string;
-  mimeType: string | undefined;
-};
-type MediaGroupBuffer = {
-  caption: string | null;
-  files: MediaGroupEntry[];
-  timer: ReturnType<typeof setTimeout>;
-};
-const mediaGroupBuffers = new Map<string, MediaGroupBuffer>();
+async function handleFiles(msg: IncomingMsg, messenger: Messenger): Promise<void> {
+  const chatIdNum = Number(msg.chatId);
+  const uploadedBy = msg.userName;
+  const uploadedAt = msg.date;
+  const caption = msg.caption;
 
-async function flushMediaGroup(groupId: string) {
-  const buf = mediaGroupBuffers.get(groupId);
-  if (!buf) return;
-  mediaGroupBuffers.delete(groupId);
-
-  const { caption, files } = buf;
-  for (const { ctx, telegramFileId, fileName, mimeType } of files) {
-    const chatId = ctx.message.chat.id;
-    const uploadedBy = ctx.message.from?.first_name ?? null;
-    const uploadedAt = ctx.message.date;
+  for (const file of msg.files) {
     try {
       const saved = await downloadAndSaveFile(
-        bot, telegramFileId, fileName, mimeType,
-        chatId, uploadedBy, caption, uploadedAt
+        (ref) => messenger.downloadFile(ref),
+        file.id,
+        file.fileName,
+        file.mimeType,
+        chatIdNum,
+        uploadedBy,
+        caption,
+        uploadedAt
       );
       const memoNote = caption ? ` (메모: ${caption})` : " — 메모: ## 뒤에 내용을 입력하세요.";
       console.log(`[파일 저장] #${saved.id} ${saved.localPath}`);
-      await ctx.reply(`📎 저장됨: ${fileName}${memoNote}`);
+      await messenger.sendText(msg.chatId, `📎 저장됨: ${file.fileName}${memoNote}`);
     } catch (err) {
       console.error("파일 저장 실패:", err);
-      await ctx.reply("파일 저장 중 오류가 발생했습니다.");
+      await messenger.sendText(msg.chatId, "파일 저장 중 오류가 발생했습니다.");
     }
   }
 }
 
-async function handleFileMessage(
-  ctx: any,
-  telegramFileId: string,
-  fileName: string,
-  mimeType: string | undefined
-) {
-  const groupId = ctx.message.media_group_id as string | undefined;
-
-  if (groupId) {
-    const caption = ctx.message.caption as string | undefined;
-    let buf = mediaGroupBuffers.get(groupId);
-    if (!buf) {
-      buf = { caption: null, files: [], timer: setTimeout(() => flushMediaGroup(groupId), 500) };
-      mediaGroupBuffers.set(groupId, buf);
-    }
-    if (caption) buf.caption = caption;
-    buf.files.push({ ctx, telegramFileId, fileName, mimeType });
-    return;
-  }
-
-  const chatId = ctx.message.chat.id;
-  const uploadedBy = ctx.message.from?.first_name ?? null;
-  const uploadedAt = ctx.message.date;
-  const caption = ctx.message.caption ?? null;
-
-  try {
-    const saved = await downloadAndSaveFile(
-      bot, telegramFileId, fileName, mimeType,
-      chatId, uploadedBy, caption, uploadedAt
-    );
-    const memoNote = caption ? ` (메모: ${caption})` : " — 메모: ## 뒤에 내용을 입력하세요.";
-    console.log(`[파일 저장] #${saved.id} ${saved.localPath}`);
-    await ctx.reply(`📎 저장됨: ${fileName}${memoNote}`);
-  } catch (err) {
-    console.error("파일 저장 실패:", err);
-    await ctx.reply("파일 저장 중 오류가 발생했습니다.");
-  }
-}
-
-bot.on("message:document", async (ctx) => {
-  const doc = ctx.message.document;
-  await handleFileMessage(ctx, doc.file_id, doc.file_name ?? `file_${ctx.message.date}`, doc.mime_type);
-});
-
-bot.on("message:photo", async (ctx) => {
-  const photo = ctx.message.photo.at(-1)!; // 가장 큰 사이즈
-  await handleFileMessage(ctx, photo.file_id, `photo_${ctx.message.date}.jpg`, "image/jpeg");
-});
-
-bot.on("message:voice", async (ctx) => {
-  const chatId = ctx.message.chat.id;
-  const settings = getChatSettings(chatId);
+async function handleVoice(msg: IncomingMsg, messenger: Messenger): Promise<void> {
+  const chatIdNum = Number(msg.chatId);
+  const settings = getChatSettings(chatIdNum);
   if (!settings.translation?.enabled) return;
 
   const target = settings.translation.target;
-  const voice = ctx.message.voice;
+  const voice = msg.voice!;
 
   // 파일 다운로드
   let localPath: string;
   try {
-    const tgFile = await bot.api.getFile(voice.file_id);
-    if (!tgFile.file_path) throw new Error("file_path not available");
-    const url = `https://api.telegram.org/file/bot${config.telegramToken}/${tgFile.file_path}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`다운로드 실패: ${res.status}`);
+    const { buffer } = await messenger.downloadFile(voice);
 
     const { join } = await import("node:path");
     const { mkdir } = await import("node:fs/promises");
-    const dir = join(config.workspaceDir, "voice", String(chatId));
+    const dir = join(config.workspaceDir, "voice", String(chatIdNum));
     await mkdir(dir, { recursive: true });
-    localPath = join(dir, `${ctx.message.date}_voice.ogg`);
-    await Bun.write(localPath, await res.arrayBuffer());
+    localPath = join(dir, `${msg.date}_voice.ogg`);
+    await Bun.write(localPath, buffer);
   } catch (err) {
     console.error("[음성] 다운로드 실패:", err);
-    return ctx.reply("음성 파일 다운로드에 실패했습니다.");
+    return messenger.sendText(msg.chatId, "음성 파일 다운로드에 실패했습니다.");
   }
 
-  await ctx.replyWithChatAction("typing").catch(() => {});
+  await messenger.sendTyping(msg.chatId);
 
   try {
     const result = await transcribeAndTranslate(localPath, target, config.geminiApiKey);
-    saveVoiceLog(chatId, voice.file_id, localPath, result, target);
-    await ctx.reply(`${result.transcript}\n\n${result.translation}`);
+    saveVoiceLog(chatIdNum, voice.id, localPath, result, target);
+    await messenger.sendText(msg.chatId, `${result.transcript}\n\n${result.translation}`);
   } catch (err) {
     console.error("[음성] 번역 실패:", err);
-    await ctx.reply("음성 번역 중 오류가 발생했습니다.");
+    await messenger.sendText(msg.chatId, "음성 번역 중 오류가 발생했습니다.");
   }
-});
+}
 
-bot.on("message:text", async (ctx) => {
-  const chatId = ctx.message.chat.id;
-  const text = ctx.message.text;
-  const name = ctx.message.from.first_name;
-  const isGroup = ctx.message.chat.type === "group" || ctx.message.chat.type === "supergroup";
+async function handleText(msg: IncomingMsg, messenger: Messenger): Promise<void> {
+  const chatId = msg.chatId;
+  const chatIdNum = Number(chatId);
+  const text = msg.text!;
+  const name = msg.userName ?? "";
+  const isGroup = msg.isGroup;
   console.log(`[recv] ${name} (${chatId}): ${text.slice(0, 80)}`);
 
   const sessionKey = `chat:${chatId}`;
 
   const HELP_TRIGGERS = ["도움말", "help", "헬프", "뭐하지", '머하지', "뭐 할 수 있어", "뭐할수있어", "?"];
   if (HELP_TRIGGERS.some((t) => text.trim().toLowerCase() === t)) {
-    return ctx.reply(getHelpText(TRIGGER_ALIASES));
+    return messenger.sendText(chatId, getHelpText(TRIGGER_ALIASES));
   }
 
-  if (tryUpdateMemo(chatId, text.trim())) {
-    return ctx.reply("메모가 업데이트됐습니다.");
+  if (tryUpdateMemo(chatIdNum, text.trim())) {
+    return messenger.sendText(chatId, "메모가 업데이트됐습니다.");
   }
 
   if (text.trim() === "세션 재시작") {
@@ -191,9 +127,9 @@ bot.on("message:text", async (ctx) => {
       deleteSession(sessionKey);
     } catch (err) {
       console.error("세션 삭제 실패:", err);
-      return ctx.reply("세션 초기화 중 오류가 발생했습니다.");
+      return messenger.sendText(chatId, "세션 초기화 중 오류가 발생했습니다.");
     }
-    return ctx.reply("세션을 초기화했습니다.");
+    return messenger.sendText(chatId, "세션을 초기화했습니다.");
   }
 
   // 번역 명령 인터셉트 (% 번역 on [lang] / off)
@@ -205,17 +141,17 @@ bot.on("message:text", async (ctx) => {
 
     if (onMatch) {
       if (!config.geminiApiKey) {
-        return ctx.reply("번역 기능을 사용하려면 GEMINI_API_KEY가 필요합니다.");
+        return messenger.sendText(chatId, "번역 기능을 사용하려면 GEMINI_API_KEY가 필요합니다.");
       }
       const target = onMatch[2] ?? "en";
-      updateChatSettings(chatId, { translation: { enabled: true, target } });
+      updateChatSettings(chatIdNum, { translation: { enabled: true, target } });
       const label = LANG_LABELS[target] ?? target;
-      return ctx.reply(`번역 모드 켜짐 (한국어 ↔ ${label})`);
+      return messenger.sendText(chatId, `번역 모드 켜짐 (한국어 ↔ ${label})`);
     }
 
     if (offMatch) {
-      updateChatSettings(chatId, { translation: { enabled: false, target: "en" } });
-      return ctx.reply("번역 모드 꺼짐");
+      updateChatSettings(chatIdNum, { translation: { enabled: false, target: "en" } });
+      return messenger.sendText(chatId, "번역 모드 꺼짐");
     }
   }
 
@@ -253,7 +189,7 @@ bot.on("message:text", async (ctx) => {
   const reqStart = Date.now();
   console.log(`[${name}${isGroup ? " (그룹)" : ""}] ${preview}`);
 
-  if (config.noAgent) return ctx.reply("저장됨");
+  if (config.noAgent) return messenger.sendText(chatId, "저장됨");
 
   // 그룹챗: 최근 컨텍스트 조립
   let finalPrompt = prompt;
@@ -266,7 +202,7 @@ bot.on("message:text", async (ctx) => {
         `SELECT first_name, text, date FROM messages
          WHERE chat_id = ? AND role = 'user' AND date >= ? AND text NOT LIKE '${trigger}%' AND text NOT LIKE '$ %' AND text NOT LIKE '% %'
          ORDER BY date DESC LIMIT ?`
-      ).all(chatId, since, contextMax).reverse();
+      ).all(chatIdNum, since, contextMax).reverse();
 
       if (rows.length > 0) {
         const lines = rows.map((r) => {
@@ -304,7 +240,7 @@ bot.on("message:text", async (ctx) => {
     console.error("세션 조회 실패:", err);
   }
 
-  await ctx.replyWithChatAction("typing").catch(() => { });
+  await messenger.sendTyping(chatId);
 
   let result: { response: string; sessionId: string };
   try {
@@ -321,9 +257,9 @@ bot.on("message:text", async (ctx) => {
   } catch (err) {
     console.error(err);
     if (err instanceof CodexTimeoutError || err instanceof GeminiTimeoutError || err instanceof OpencodeTimeoutError) {
-      return ctx.reply("응답 시간이 너무 오래 걸려 중단했습니다.");
+      return messenger.sendText(chatId, "응답 시간이 너무 오래 걸려 중단했습니다.");
     }
-    return ctx.reply("에이전트 실행 중 오류가 발생했습니다.");
+    return messenger.sendText(chatId, "에이전트 실행 중 오류가 발생했습니다.");
   }
   console.log(`[${name}${isGroup ? " (그룹)" : ""}] ${Date.now() - reqStart}ms`);
 
@@ -339,7 +275,7 @@ bot.on("message:text", async (ctx) => {
     getDb().run(
       "INSERT INTO messages (chat_id, user_id, first_name, text, date, raw, role) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
-        chatId,
+        chatIdNum,
         null,
         config.botTriggerName,
         result.response,
@@ -352,9 +288,9 @@ bot.on("message:text", async (ctx) => {
     console.error("DB 응답 저장 실패:", err);
   }
 
-  const { cleaned, refs } = extractFileRefs(result.response, chatId);
+  const { cleaned, refs } = extractFileRefs(result.response, chatIdNum);
   const afterGuro = await processGuroTemplates(cleaned);
-  const processed = processTemplates(extractAlarms(afterGuro, chatId));
+  const processed = processTemplates(extractAlarms(afterGuro, chatIdNum));
   const messages: string[] = [];
   let textBuffer: string[] = [];
 
@@ -371,37 +307,48 @@ bot.on("message:text", async (ctx) => {
   }
   if (textBuffer.join("").trim()) messages.push(textBuffer.join("\n").trim());
 
-  for (const msg of messages) {
-    if (!msg) continue;
-    const chunks = msg.match(/[\s\S]{1,4096}/g) ?? [];
-    for (const chunk of chunks) {
-      await ctx.reply(chunk);
-    }
+  for (const out of messages) {
+    if (!out) continue;
+    await messenger.sendText(chatId, out); // 4096 분할은 어댑터 내부
   }
 
   for (const ref of refs) {
     try {
       const data = await Bun.file(ref.localPath).bytes();
-      const file = new InputFile(data, ref.fileName);
       const mime = ref.mimeType ?? "";
+      let kind: OutFile["kind"];
       if (mime === "image/gif") {
-        await ctx.replyWithAnimation(file);
+        kind = "animation";
       } else if (mime.startsWith("image/")) {
-        await ctx.replyWithPhoto(file);
+        kind = "photo";
       } else if (mime.startsWith("video/")) {
-        await ctx.replyWithVideo(file);
+        kind = "video";
       } else if (mime.startsWith("audio/")) {
-        await ctx.replyWithAudio(file);
+        kind = "audio";
       } else {
-        await ctx.replyWithDocument(file);
+        kind = "document";
       }
+      await messenger.sendFile(chatId, { data, fileName: ref.fileName, kind });
     } catch (err) {
       console.error(`파일 전송 실패 #${ref.id}:`, err);
-      await ctx.reply(`파일 전송 실패: ${ref.fileName}`);
+      await messenger.sendText(chatId, `파일 전송 실패: ${ref.fileName}`);
     }
   }
-});
+}
 
-initAlarms(bot);
-bot.start();
-console.log(`Bot started (trigger: "${config.botTriggerName}", backend: ${config.agentBackend})`);
+export async function handleMessage(msg: IncomingMsg, messenger: Messenger): Promise<void> {
+  saveIncoming(msg);
+
+  if (msg.voice) return handleVoice(msg, messenger);
+  if (msg.files.length > 0) return handleFiles(msg, messenger);
+  if (msg.text != null) return handleText(msg, messenger);
+}
+
+// 봇 기동 — import 시(테스트 등)에는 실행하지 않음
+if (import.meta.main) {
+  const messenger = createMessenger(config.messenger);
+  messenger.onMessage((m) => handleMessage(m, messenger));
+  initAlarms(messenger);
+  messenger.start();
+  console.log(`Bot started (trigger: "${config.botTriggerName}", backend: ${config.agentBackend})`);
+}

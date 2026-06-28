@@ -1,8 +1,8 @@
 import { getDb } from "./db";
 import { config } from "./config";
-import type { Bot } from "grammy";
+import type { Messenger } from "./messenger/types";
 
-let _bot: Bot | null = null;
+let _msgr: Messenger | null = null;
 
 export type RepeatType = "daily" | "weekly" | "weekdays" | "monthly";
 
@@ -20,8 +20,8 @@ export function registerAlarm(
   scheduleAlarm(Number(result.lastInsertRowid), fireAt, chatId, content, repeat ?? null, repeatDom);
 }
 
-export function initAlarms(bot: Bot): void {
-  _bot = bot;
+export function initAlarms(messenger: Messenger): void {
+  _msgr = messenger;
 
   const pending = getDb()
     .query<
@@ -114,8 +114,8 @@ function fire(
     getDb().run("UPDATE alarms SET sent = 1 WHERE id = ?", [id]);
   }
 
-  _bot?.api
-    .sendMessage(chatId, `⏰ ${content}`)
+  _msgr
+    ?.sendText(String(chatId), `⏰ ${content}`)
     .catch((err) => console.error("알람 발송 실패:", err));
 }
 

@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { getDb } from "./db";
 import { config } from "./config";
-import type { Bot } from "grammy";
+import type { FileDownloader } from "./messenger/types";
 
 export type SavedFile = {
   id: number;
@@ -11,7 +11,7 @@ export type SavedFile = {
 };
 
 export async function downloadAndSaveFile(
-  bot: Bot,
+  download: FileDownloader,
   telegramFileId: string,
   fileName: string,
   mimeType: string | undefined,
@@ -20,19 +20,14 @@ export async function downloadAndSaveFile(
   memo: string | null,
   uploadedAt: number
 ): Promise<SavedFile> {
-  const tgFile = await bot.api.getFile(telegramFileId);
-  if (!tgFile.file_path) throw new Error("file_path not available");
-
-  const url = `https://api.telegram.org/file/bot${config.telegramToken}/${tgFile.file_path}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`파일 다운로드 실패: ${res.status}`);
+  const { buffer } = await download({ id: telegramFileId, fileName, mimeType });
 
   const dir = join(config.workspaceDir, "files", String(chatId));
   await mkdir(dir, { recursive: true });
 
   const safeName = fileName.replace(/[^\w가-힣._-]/g, "_");
   const localPath = join(dir, `${uploadedAt}_${safeName}`);
-  await Bun.write(localPath, await res.arrayBuffer());
+  await Bun.write(localPath, buffer);
 
   const result = getDb().run(
     `INSERT INTO files (chat_id, telegram_file_id, file_name, mime_type, local_path, memo, uploaded_by, uploaded_at)
