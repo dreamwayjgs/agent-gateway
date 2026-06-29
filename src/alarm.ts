@@ -7,7 +7,7 @@ let _msgr: Messenger | null = null;
 export type RepeatType = "daily" | "weekly" | "weekdays" | "monthly";
 
 export function registerAlarm(
-  chatId: number,
+  chatId: string,
   fireAt: number,
   content: string,
   repeat?: RepeatType
@@ -27,7 +27,7 @@ export function initAlarms(messenger: Messenger): void {
     .query<
       {
         id: number;
-        chat_id: number;
+        chat_id: string;
         fire_at: number;
         content: string;
         repeat: string | null;
@@ -56,7 +56,7 @@ export function initAlarms(messenger: Messenger): void {
       .query<
         {
           id: number;
-          chat_id: number;
+          chat_id: string;
           fire_at: number;
           content: string;
           repeat: string | null;
@@ -78,7 +78,7 @@ const MAX_TIMEOUT_MS = 2 ** 31 - 1; // ~24.8일, setTimeout 32비트 한계
 function scheduleAlarm(
   id: number,
   fireAt: number,
-  chatId: number,
+  chatId: string,
   content: string,
   repeat: RepeatType | null,
   repeatDom: number | null
@@ -95,7 +95,7 @@ function scheduleAlarm(
 function fire(
   id: number,
   scheduledAt: number,
-  chatId: number,
+  chatId: string,
   content: string,
   repeat: RepeatType | null,
   repeatDom: number | null
@@ -115,7 +115,7 @@ function fire(
   }
 
   _msgr
-    ?.sendText(String(chatId), `⏰ ${content}`)
+    ?.sendText(chatId, `⏰ ${content}`)
     .catch((err) => console.error("알람 발송 실패:", err));
 }
 

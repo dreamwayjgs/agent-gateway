@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { getDb } from "./db";
 import { config } from "./config";
+import { safeChatSegment } from "./util";
 import type { FileDownloader } from "./messenger/types";
 
 export type SavedFile = {
@@ -15,14 +16,14 @@ export async function downloadAndSaveFile(
   telegramFileId: string,
   fileName: string,
   mimeType: string | undefined,
-  chatId: number,
+  chatId: string,
   uploadedBy: string | null,
   memo: string | null,
   uploadedAt: number
 ): Promise<SavedFile> {
   const { buffer } = await download({ id: telegramFileId, fileName, mimeType });
 
-  const dir = join(config.workspaceDir, "files", String(chatId));
+  const dir = join(config.workspaceDir, "files", safeChatSegment(chatId));
   await mkdir(dir, { recursive: true });
 
   const safeName = fileName.replace(/[^\w가-힣._-]/g, "_");
@@ -43,11 +44,11 @@ export type FileRef = { id: number; localPath: string; fileName: string; mimeTyp
 // {{파일:id}} 추출 후 텍스트에서 제거, 파일 정보 반환
 const FILE_REF_RE = /\{\{파일:(\d+)\}\}/g;
 
-export function extractFileRefs(text: string, chatId: number): { cleaned: string; refs: FileRef[] } {
+export function extractFileRefs(text: string, chatId: string): { cleaned: string; refs: FileRef[] } {
   const refs: FileRef[] = [];
   const cleaned = text.replace(FILE_REF_RE, (_, idStr) => {
     const row = getDb()
-      .query<{ local_path: string; file_name: string | null; mime_type: string | null }, [number, number]>(
+      .query<{ local_path: string; file_name: string | null; mime_type: string | null }, [number, string]>(
         "SELECT local_path, file_name, mime_type FROM files WHERE id = ? AND chat_id = ?"
       )
       .get(Number(idStr), chatId);
@@ -58,14 +59,14 @@ export function extractFileRefs(text: string, chatId: number): { cleaned: string
 }
 
 // ## 으로 시작하면 직전 파일에 메모 저장
-export function tryUpdateMemo(chatId: number, text: string): boolean {
+export function tryUpdateMemo(chatId: string, text: string): boolean {
   if (!text.startsWith("##")) return false;
 
   const memo = text.slice(2).trim();
   if (!memo) return false;
 
   const last = getDb()
-    .query<{ id: number }, [number]>(
+    .query<{ id: number }, [string]>(
       "SELECT id FROM files WHERE chat_id = ? ORDER BY uploaded_at DESC LIMIT 1"
     )
     .get(chatId);

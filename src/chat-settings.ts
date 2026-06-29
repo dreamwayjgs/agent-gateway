@@ -7,9 +7,9 @@ export type ChatSettings = {
   };
 };
 
-export function getChatSettings(chatId: number): ChatSettings {
+export function getChatSettings(chatId: string): ChatSettings {
   const row = getDb()
-    .query<{ settings: string }, [number]>("SELECT settings FROM chat_settings WHERE chat_id = ?")
+    .query<{ settings: string }, [string]>("SELECT settings FROM chat_settings WHERE chat_id = ?")
     .get(chatId);
   if (!row) return {};
   try {
@@ -19,7 +19,7 @@ export function getChatSettings(chatId: number): ChatSettings {
   }
 }
 
-export function updateChatSettings(chatId: number, patch: Partial<ChatSettings>): void {
+export function updateChatSettings(chatId: string, patch: Partial<ChatSettings>): void {
   const current = getChatSettings(chatId);
   const updated = { ...current, ...patch };
   const now = Math.floor(Date.now() / 1000);

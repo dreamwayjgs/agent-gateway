@@ -77,7 +77,7 @@ Respond ONLY in this exact JSON format (no markdown, no extra text):
 }
 
 export function saveVoiceLog(
-  chatId: number,
+  chatId: string,
   fileId: string,
   localPath: string,
   result: TranslateResult,

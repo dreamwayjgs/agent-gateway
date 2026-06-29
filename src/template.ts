@@ -57,7 +57,7 @@ const ALARM_RE = /\{\{알람:([^|}\s]+)\|([^|}]+)(?:\|([^}]+))?\}\}/g;
 const ALARM_LIST_RE = /\{\{알람목록\}\}/g;
 const ALARM_CANCEL_RE = /\{\{알람취소:(\d+)\}\}/g;
 
-export function extractAlarms(text: string, chatId: number): string {
+export function extractAlarms(text: string, chatId: string): string {
   // 1. 알람 등록
   let result = text.replace(ALARM_RE, (_, iso, content, repeatRaw) => {
     const repeat = parseRepeat(repeatRaw);
@@ -78,7 +78,7 @@ export function extractAlarms(text: string, chatId: number): string {
     const rows = getDb()
       .query<
         { id: number; fire_at: number; content: string; repeat: string | null },
-        [number, number]
+        [string, number]
       >(
         "SELECT id, fire_at, content, repeat FROM alarms WHERE chat_id = ? AND sent = 0 AND fire_at > ? ORDER BY fire_at ASC"
       )
@@ -100,7 +100,7 @@ export function extractAlarms(text: string, chatId: number): string {
   result = result.replace(ALARM_CANCEL_RE, (_, idStr) => {
     const id = Number(idStr);
     const alarm = getDb()
-      .query<{ id: number }, [number, number]>(
+      .query<{ id: number }, [number, string]>(
         "SELECT id FROM alarms WHERE id = ? AND chat_id = ? AND sent = 0"
       )
       .get(id, chatId);

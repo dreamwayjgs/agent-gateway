@@ -15,6 +15,7 @@ import { fetchKakaoPlaceInfo } from "./tools/kakaomap";
 import { fetchTmapPlaceInfo } from "./tools/tmap";
 import { getGuroContext, processGuroTemplates } from "./tools/guro";
 import { createMessenger } from "./messenger";
+import { safeChatSegment } from "./util";
 import type { IncomingMsg, Messenger, OutFile } from "./messenger/types";
 
 const TRIGGER_ALIASES = ["$ ", "% "];
@@ -26,8 +27,8 @@ function saveIncoming(msg: IncomingMsg): void {
     getDb().run(
       "INSERT INTO messages (chat_id, user_id, first_name, text, date, raw) VALUES (?, ?, ?, ?, ?, ?)",
       [
-        Number(msg.chatId),
-        msg.userId != null ? Number(msg.userId) : null,
+        msg.chatId,
+        msg.userId,
         msg.userName,
         msg.text,
         msg.date,
@@ -40,7 +41,7 @@ function saveIncoming(msg: IncomingMsg): void {
 }
 
 async function handleFiles(msg: IncomingMsg, messenger: Messenger): Promise<void> {
-  const chatIdNum = Number(msg.chatId);
+  const chatId = msg.chatId;
   const uploadedBy = msg.userName;
   const uploadedAt = msg.date;
   const caption = msg.caption;
@@ -52,7 +53,7 @@ async function handleFiles(msg: IncomingMsg, messenger: Messenger): Promise<void
         file.id,
         file.fileName,
         file.mimeType,
-        chatIdNum,
+        chatId,
         uploadedBy,
         caption,
         uploadedAt
@@ -68,8 +69,8 @@ async function handleFiles(msg: IncomingMsg, messenger: Messenger): Promise<void
 }
 
 async function handleVoice(msg: IncomingMsg, messenger: Messenger): Promise<void> {
-  const chatIdNum = Number(msg.chatId);
-  const settings = getChatSettings(chatIdNum);
+  const chatId = msg.chatId;
+  const settings = getChatSettings(chatId);
   if (!settings.translation?.enabled) return;
 
   const target = settings.translation.target;
@@ -82,7 +83,7 @@ async function handleVoice(msg: IncomingMsg, messenger: Messenger): Promise<void
 
     const { join } = await import("node:path");
     const { mkdir } = await import("node:fs/promises");
-    const dir = join(config.workspaceDir, "voice", String(chatIdNum));
+    const dir = join(config.workspaceDir, "voice", safeChatSegment(chatId));
     await mkdir(dir, { recursive: true });
     localPath = join(dir, `${msg.date}_voice.ogg`);
     await Bun.write(localPath, buffer);
@@ -95,7 +96,7 @@ async function handleVoice(msg: IncomingMsg, messenger: Messenger): Promise<void
 
   try {
     const result = await transcribeAndTranslate(localPath, target, config.geminiApiKey);
-    saveVoiceLog(chatIdNum, voice.id, localPath, result, target);
+    saveVoiceLog(chatId, voice.id, localPath, result, target);
     await messenger.sendText(msg.chatId, `${result.transcript}\n\n${result.translation}`);
   } catch (err) {
     console.error("[음성] 번역 실패:", err);
@@ -105,7 +106,6 @@ async function handleVoice(msg: IncomingMsg, messenger: Messenger): Promise<void
 
 async function handleText(msg: IncomingMsg, messenger: Messenger): Promise<void> {
   const chatId = msg.chatId;
-  const chatIdNum = Number(chatId);
   const text = msg.text!;
   const name = msg.userName ?? "";
   const isGroup = msg.isGroup;
@@ -118,7 +118,7 @@ async function handleText(msg: IncomingMsg, messenger: Messenger): Promise<void>
     return messenger.sendText(chatId, getHelpText(TRIGGER_ALIASES));
   }
 
-  if (tryUpdateMemo(chatIdNum, text.trim())) {
+  if (tryUpdateMemo(chatId, text.trim())) {
     return messenger.sendText(chatId, "메모가 업데이트됐습니다.");
   }
 
@@ -144,13 +144,13 @@ async function handleText(msg: IncomingMsg, messenger: Messenger): Promise<void>
         return messenger.sendText(chatId, "번역 기능을 사용하려면 GEMINI_API_KEY가 필요합니다.");
       }
       const target = onMatch[2] ?? "en";
-      updateChatSettings(chatIdNum, { translation: { enabled: true, target } });
+      updateChatSettings(chatId, { translation: { enabled: true, target } });
       const label = LANG_LABELS[target] ?? target;
       return messenger.sendText(chatId, `번역 모드 켜짐 (한국어 ↔ ${label})`);
     }
 
     if (offMatch) {
-      updateChatSettings(chatIdNum, { translation: { enabled: false, target: "en" } });
+      updateChatSettings(chatId, { translation: { enabled: false, target: "en" } });
       return messenger.sendText(chatId, "번역 모드 꺼짐");
     }
   }
@@ -198,11 +198,11 @@ async function handleText(msg: IncomingMsg, messenger: Messenger): Promise<void>
       const contextMins = config.contextMinutes;
       const contextMax = config.contextMaxMessages;
       const since = Math.floor(Date.now() / 1000) - contextMins * 60;
-      const rows = getDb().query<{ first_name: string | null; text: string; date: number }, [number, number, number]>(
+      const rows = getDb().query<{ first_name: string | null; text: string; date: number }, [string, number, number]>(
         `SELECT first_name, text, date FROM messages
          WHERE chat_id = ? AND role = 'user' AND date >= ? AND text NOT LIKE '${trigger}%' AND text NOT LIKE '$ %' AND text NOT LIKE '% %'
          ORDER BY date DESC LIMIT ?`
-      ).all(chatIdNum, since, contextMax).reverse();
+      ).all(chatId, since, contextMax).reverse();
 
       if (rows.length > 0) {
         const lines = rows.map((r) => {
@@ -275,7 +275,7 @@ async function handleText(msg: IncomingMsg, messenger: Messenger): Promise<void>
     getDb().run(
       "INSERT INTO messages (chat_id, user_id, first_name, text, date, raw, role) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
-        chatIdNum,
+        chatId,
         null,
         config.botTriggerName,
         result.response,
@@ -288,9 +288,9 @@ async function handleText(msg: IncomingMsg, messenger: Messenger): Promise<void>
     console.error("DB 응답 저장 실패:", err);
   }
 
-  const { cleaned, refs } = extractFileRefs(result.response, chatIdNum);
+  const { cleaned, refs } = extractFileRefs(result.response, chatId);
   const afterGuro = await processGuroTemplates(cleaned);
-  const processed = processTemplates(extractAlarms(afterGuro, chatIdNum));
+  const processed = processTemplates(extractAlarms(afterGuro, chatId));
   const messages: string[] = [];
   let textBuffer: string[] = [];
 
