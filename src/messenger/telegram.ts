@@ -141,22 +141,26 @@ export class TelegramMessenger implements Messenger {
   }
 
   async sendFile(chatId: string, file: OutFile): Promise<void> {
-    const input = new InputFile(file.data, file.fileName);
+    const input = () => new InputFile(file.data, file.fileName);
     switch (file.kind) {
       case "animation":
-        await this.bot.api.sendAnimation(chatId, input);
+        await this.bot.api.sendAnimation(chatId, input());
         break;
       case "photo":
-        await this.bot.api.sendPhoto(chatId, input);
+        try {
+          await this.bot.api.sendPhoto(chatId, input());
+        } catch {
+          await this.bot.api.sendDocument(chatId, input());
+        }
         break;
       case "video":
-        await this.bot.api.sendVideo(chatId, input);
+        await this.bot.api.sendVideo(chatId, input());
         break;
       case "audio":
-        await this.bot.api.sendAudio(chatId, input);
+        await this.bot.api.sendAudio(chatId, input());
         break;
       default:
-        await this.bot.api.sendDocument(chatId, input);
+        await this.bot.api.sendDocument(chatId, input());
     }
   }
 
