@@ -8,7 +8,9 @@ export function validateTimezone(tz: string): string {
 }
 
 export const config = {
-  telegramToken: process.env.TELEGRAM_BOT_TOKEN ?? (() => { throw new Error("TELEGRAM_BOT_TOKEN is required") })(),
+  telegramToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+  discordToken: process.env.DISCORD_BOT_TOKEN ?? "",
+  discordAllowlist: (process.env.DISCORD_ALLOWLIST ?? "").split(",").map((s) => s.trim()).filter(Boolean),
   messenger: process.env.MESSENGER ?? "telegram",
   dbFile: process.env.DB_FILE ?? "./data/data.db",
   sessionResetDays: Number(process.env.SESSION_RESET_DAYS ?? 7),

@@ -16,6 +16,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "discord.js": "^14.26.4",
     "grammy": "^1.41.1"
   }
 }

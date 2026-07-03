@@ -6,6 +6,9 @@ services:
     environment:
       - DB_FILE=/home/bun/data/data.db
       - WORKSPACE_DIR=/home/bun/workspace
+      - MESSENGER=${MESSENGER:-telegram}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_ALLOWLIST=${DISCORD_ALLOWLIST:-}
     logging:
       driver: json-file
       options:
