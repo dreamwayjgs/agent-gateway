@@ -41,9 +41,12 @@ Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully suppor
 | 이름 | 역할 | 도구 | 역할 파일 |
 |------|------|------|-----------|
 | 앨리스 | Architect | Claude | `agents/ARCHITECT.md` |
-| 밥 | Builder | Claude | `agents/BUILDER.md` |
+| 밥 | Builder | Claude 또는 opencode/Codex | Claude → `agents/BUILDER.md` · opencode/Codex → `AGENTS.md §1` |
 | 리처드 | Reviewer (1차) | Claude | `agents/REVIEWER.md` |
-| 로저 | Second Reviewer (2차) | Codex | `AGENTS.md` |
+| 로저 | Second Reviewer (2차) | Codex | `AGENTS.md §2` |
+
+> 어떤 역할이 어떤 도구로 도는지는 **상황에 따라 다르다**. opencode/Codex로 구동되는 역할은
+> `CLAUDE.md`가 아니라 루트 `AGENTS.md`의 해당 섹션(§1 밥 / §2 로저)을 읽는다.
 
 ### 활성 리뷰어
 
