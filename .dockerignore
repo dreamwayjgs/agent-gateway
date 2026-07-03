@@ -1,5 +1,9 @@
 node_modules
 data/
+data.bak/
 data.db*
 workspace/files/
+.git/
+.npm-cache/
+.codex/
 .env*

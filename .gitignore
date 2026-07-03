@@ -7,8 +7,10 @@ agents/
 
 # runtime data
 data/
+data.bak/
 data.db*
 sessions.json
+.codex
 
 # workspace — runtime 파일은 제외, 지침/스크립트만 추적
 workspace/*

@@ -12,6 +12,8 @@ export class AgentTimeoutError extends Error {}
 export function runCodex(prompt: string, resumeId?: string): Promise<CodexResult> {
   return new Promise((resolve, reject) => {
     const commonFlags = ["--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"];
+    const model = process.env.CODEX_MODEL;
+    if (model) commonFlags.push("-m", model);
     const args = resumeId
       ? ["exec", "resume", ...commonFlags, resumeId, prompt]
       : ["exec", ...commonFlags, prompt];

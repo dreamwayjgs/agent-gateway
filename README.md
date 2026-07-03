@@ -17,7 +17,7 @@ Telegram 채팅으로 AI 에이전트(codex / gemini-cli)를 구동하는 경량
 
 | `AGENT_BACKEND` | 필요 CLI / 키 |
 |---|---|
-| `codex` (기본) | `@openai/codex`, `OPENAI_API_KEY` |
+| `codex` (기본) | `@openai/codex`, `OPENAI_API_KEY`, `CODEX_MODEL` (선택) |
 | `gemini` | `@google/gemini-cli`, `GEMINI_API_KEY` |
 | `opencode` | `opencode` CLI, `OPENCODE_MODEL` (provider/model 형식) |
 
@@ -46,6 +46,7 @@ bun src/index.ts
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | — | BotFather에서 발급 (필수) |
 | `AGENT_BACKEND` | `codex` | `codex` \| `gemini` \| `opencode` |
+| `CODEX_MODEL` | — | codex 백엔드 모델. 빈값이면 Codex 기본값/config.toml 사용 |
 | `BOT_TRIGGER_NAME` | `시리야` | 에이전트 호출 트리거 (그룹·DM 공통) |
 | `WORKSPACE_DIR` | `./workspace` | 에이전트 작업 디렉터리 |
 | `DB_FILE` | `./data/data.db` | SQLite 파일 경로 |
