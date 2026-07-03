@@ -191,6 +191,28 @@ const MIGRATIONS: { name: string; sql: string }[] = [
         WHERE key LIKE 'chat:%' AND key NOT LIKE 'chat:%:%';
     `,
   },
+  {
+    // local_path를 배포 절대경로(박제)에서 workspace 기준 상대경로로 정규화.
+    // 3세대 프리픽스 혼재(호스트 상대 / 구 Docker /app / 현행 /home/bun)를 전부 'files/...' 상대로.
+    // substr 오프셋 = prefix 길이+1: '/app/workspace/'=15, '/home/bun/workspace/'=20, 'workspace/'=10.
+    name: "012_relative_paths",
+    sql: `
+      UPDATE files SET local_path =
+        CASE
+          WHEN local_path LIKE '/app/workspace/%'      THEN substr(local_path, 16)
+          WHEN local_path LIKE '/home/bun/workspace/%' THEN substr(local_path, 21)
+          WHEN local_path LIKE 'workspace/%'           THEN substr(local_path, 11)
+          ELSE local_path
+        END;
+      UPDATE voice_logs SET local_path =
+        CASE
+          WHEN local_path LIKE '/app/workspace/%'      THEN substr(local_path, 16)
+          WHEN local_path LIKE '/home/bun/workspace/%' THEN substr(local_path, 21)
+          WHEN local_path LIKE 'workspace/%'           THEN substr(local_path, 11)
+          ELSE local_path
+        END;
+    `,
+  },
 ];
 
 let _db: Database | null = null;

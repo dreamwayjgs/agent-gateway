@@ -81,15 +81,16 @@ async function handleVoice(msg: IncomingMsg, messenger: Messenger): Promise<void
   const voice = msg.voice!;
 
   // 파일 다운로드
-  let localPath: string;
+  let localPath: string; // 절대경로 — transcribe 소비용
+  let relPath: string; // workspace 기준 상대경로 — DB 저장용
   try {
     const { buffer } = await messenger.downloadFile(voice);
 
     const { join } = await import("node:path");
     const { mkdir } = await import("node:fs/promises");
-    const dir = join(config.workspaceDir, "voice", safeChatSegment(chatId));
-    await mkdir(dir, { recursive: true });
-    localPath = join(dir, `${msg.date}_voice.ogg`);
+    relPath = join("voice", safeChatSegment(chatId), `${msg.date}_voice.ogg`);
+    localPath = join(config.workspaceDir, relPath);
+    await mkdir(join(config.workspaceDir, "voice", safeChatSegment(chatId)), { recursive: true });
     await Bun.write(localPath, buffer);
   } catch (err) {
     console.error("[음성] 다운로드 실패:", err);
@@ -100,7 +101,7 @@ async function handleVoice(msg: IncomingMsg, messenger: Messenger): Promise<void
 
   try {
     const result = await transcribeAndTranslate(localPath, target, config.geminiApiKey);
-    saveVoiceLog(chatId, voice.id, localPath, result, target);
+    saveVoiceLog(chatId, voice.id, relPath, result, target);
     await messenger.sendText(msg.chatId, `${result.transcript}\n\n${result.translation}`);
   } catch (err) {
     console.error("[음성] 번역 실패:", err);
