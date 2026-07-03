@@ -108,6 +108,7 @@ export function toIncoming(message: DiscordMessageLike): IncomingMsg {
 }
 
 export class DiscordMessenger implements Messenger {
+  readonly platform = "discord" as const;
   private client: Client;
   private notifiedUnknown = new Set<string>();
   private warnedMissingAdmin = false;

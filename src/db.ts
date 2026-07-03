@@ -182,6 +182,15 @@ const MIGRATIONS: { name: string; sql: string }[] = [
       );
     `,
   },
+  {
+    name: "011_multimessenger_scope",
+    sql: `
+      ALTER TABLE alarms ADD COLUMN platform TEXT NOT NULL DEFAULT 'telegram';
+      UPDATE sessions
+        SET key = 'chat:telegram:' || substr(key, 6)
+        WHERE key LIKE 'chat:%' AND key NOT LIKE 'chat:%:%';
+    `,
+  },
 ];
 
 let _db: Database | null = null;

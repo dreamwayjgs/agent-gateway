@@ -9,6 +9,7 @@ import { TelegramMessenger } from "../src/messenger/telegram";
 import type { FileRef, IncomingMsg, Messenger, OutFile } from "../src/messenger/types";
 
 class FakeMessenger implements Messenger {
+  readonly platform = "telegram" as const;
   texts: { chatId: string; text: string }[] = [];
   files: { chatId: string; file: OutFile }[] = [];
   typing: string[] = [];

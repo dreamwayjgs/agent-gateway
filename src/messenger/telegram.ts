@@ -11,6 +11,7 @@ type MediaGroupBuffer = {
 };
 
 export class TelegramMessenger implements Messenger {
+  readonly platform = "telegram" as const;
   private bot: Bot;
   private token: string;
   private handler: MessageHandler | null = null;

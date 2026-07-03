@@ -14,11 +14,15 @@ import { fetchNaverPlaceInfo } from "./tools/navermap";
 import { fetchKakaoPlaceInfo } from "./tools/kakaomap";
 import { fetchTmapPlaceInfo } from "./tools/tmap";
 import { getGuroContext, processGuroTemplates } from "./tools/guro";
-import { createMessenger } from "./messenger";
+import { createMessengers } from "./messenger";
 import { safeChatSegment } from "./util";
 import type { IncomingMsg, Messenger, OutFile } from "./messenger/types";
 
 const TRIGGER_ALIASES = ["$ ", "% "];
+
+export function sessionKeyFor(msg: Pick<IncomingMsg, "platform" | "chatId">): string {
+  return `chat:${msg.platform}:${msg.chatId}`;
+}
 
 // 모든 텍스트 메시지 저장 (원본 동작: text 있을 때만 저장)
 function saveIncoming(msg: IncomingMsg): void {
@@ -111,7 +115,7 @@ async function handleText(msg: IncomingMsg, messenger: Messenger): Promise<void>
   const isGroup = msg.isGroup;
   console.log(`[recv] ${name} (${chatId}): ${text.slice(0, 80)}`);
 
-  const sessionKey = `chat:${chatId}`;
+  const sessionKey = sessionKeyFor(msg);
 
   const HELP_TRIGGERS = ["도움말", "help", "헬프", "뭐하지", '머하지', "뭐 할 수 있어", "뭐할수있어", "?"];
   if (HELP_TRIGGERS.some((t) => text.trim().toLowerCase() === t)) {
@@ -290,7 +294,7 @@ async function handleText(msg: IncomingMsg, messenger: Messenger): Promise<void>
 
   const { cleaned, refs } = extractFileRefs(result.response, chatId);
   const afterGuro = await processGuroTemplates(cleaned);
-  const processed = processTemplates(extractAlarms(afterGuro, chatId));
+  const processed = processTemplates(extractAlarms(afterGuro, chatId, msg.platform));
   const messages: string[] = [];
   let textBuffer: string[] = [];
 
@@ -346,9 +350,14 @@ export async function handleMessage(msg: IncomingMsg, messenger: Messenger): Pro
 
 // 봇 기동 — import 시(테스트 등)에는 실행하지 않음
 if (import.meta.main) {
-  const messenger = createMessenger(config.messenger);
-  messenger.onMessage((m) => handleMessage(m, messenger));
-  initAlarms(messenger);
-  messenger.start();
+  const messengers = createMessengers(config.messengers);
+  const registry = new Map(messengers.map((m) => [m.platform, m]));
+  for (const messenger of messengers) {
+    messenger.onMessage((m) => handleMessage(m, messenger));
+  }
+  for (const messenger of messengers) {
+    await messenger.start();
+  }
+  initAlarms(registry);
   console.log(`Bot started (trigger: "${config.botTriggerName}", backend: ${config.agentBackend})`);
 }

@@ -7,11 +7,15 @@ export function validateTimezone(tz: string): string {
   }
 }
 
+export function parseMessengers(value: string | undefined): string[] {
+  return (value ?? "telegram").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 export const config = {
   telegramToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
   discordToken: process.env.DISCORD_BOT_TOKEN ?? "",
   discordAdminUserId: process.env.DISCORD_ADMIN_USER_ID ?? "",
-  messenger: process.env.MESSENGER ?? "telegram",
+  messengers: parseMessengers(process.env.MESSENGER),
   dbFile: process.env.DB_FILE ?? "./data/data.db",
   sessionResetDays: Number(process.env.SESSION_RESET_DAYS ?? 7),
   tmapAppKey: process.env.TMAP_APP_KEY ?? "",

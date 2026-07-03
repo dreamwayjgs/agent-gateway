@@ -12,6 +12,7 @@ import { safeChatSegment } from "../src/util";
 import type { FileRef, IncomingMsg, Messenger, OutFile } from "../src/messenger/types";
 
 class FakeMessenger implements Messenger {
+  readonly platform = "telegram" as const;
   texts: { chatId: string; text: string }[] = [];
   onMessage(): void {}
   async sendText(chatId: string, text: string): Promise<void> {

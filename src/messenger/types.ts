@@ -30,6 +30,7 @@ export interface OutFile {
 export type FileDownloader = (ref: FileRef) => Promise<{ buffer: Buffer; mimeType?: string }>;
 
 export interface Messenger {
+  readonly platform: Platform;
   onMessage(handler: (msg: IncomingMsg) => Promise<void>): void;
   sendText(chatId: string, text: string): Promise<void>; // 분할은 어댑터 내부
   sendFile(chatId: string, file: OutFile): Promise<void>;

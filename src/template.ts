@@ -1,6 +1,7 @@
 import { config } from "./config";
 import { getDb } from "./db";
 import { registerAlarm, type RepeatType } from "./alarm";
+import type { Platform } from "./messenger/types";
 
 const HANDLERS: Record<string, (value: string) => string> = {
   주소: (v) => v,
@@ -57,13 +58,13 @@ const ALARM_RE = /\{\{알람:([^|}\s]+)\|([^|}]+)(?:\|([^}]+))?\}\}/g;
 const ALARM_LIST_RE = /\{\{알람목록\}\}/g;
 const ALARM_CANCEL_RE = /\{\{알람취소:(\d+)\}\}/g;
 
-export function extractAlarms(text: string, chatId: string): string {
+export function extractAlarms(text: string, chatId: string, platform: Platform): string {
   // 1. 알람 등록
   let result = text.replace(ALARM_RE, (_, iso, content, repeatRaw) => {
     const repeat = parseRepeat(repeatRaw);
     const fireAt = Math.floor(new Date(resolveIso(iso, config.timezone)).getTime() / 1000);
     if (isNaN(fireAt)) return `[알람 등록 실패: 시간 파싱 오류 — ${iso}]`;
-    registerAlarm(chatId, fireAt, content.trim(), repeat);
+    registerAlarm(chatId, fireAt, content.trim(), platform, repeat);
     const timeStr = new Date(fireAt * 1000).toLocaleString("ko-KR", {
       timeZone: config.timezone,
       hour12: false,
@@ -78,11 +79,11 @@ export function extractAlarms(text: string, chatId: string): string {
     const rows = getDb()
       .query<
         { id: number; fire_at: number; content: string; repeat: string | null },
-        [string, number]
+        [string, Platform, number]
       >(
-        "SELECT id, fire_at, content, repeat FROM alarms WHERE chat_id = ? AND sent = 0 AND fire_at > ? ORDER BY fire_at ASC"
+        "SELECT id, fire_at, content, repeat FROM alarms WHERE chat_id = ? AND platform = ? AND sent = 0 AND fire_at > ? ORDER BY fire_at ASC"
       )
-      .all(chatId, now);
+      .all(chatId, platform, now);
     if (rows.length === 0) return "예정된 알람이 없습니다.";
     return rows
       .map((r) => {
@@ -100,10 +101,10 @@ export function extractAlarms(text: string, chatId: string): string {
   result = result.replace(ALARM_CANCEL_RE, (_, idStr) => {
     const id = Number(idStr);
     const alarm = getDb()
-      .query<{ id: number }, [number, string]>(
-        "SELECT id FROM alarms WHERE id = ? AND chat_id = ? AND sent = 0"
+      .query<{ id: number }, [number, string, Platform]>(
+        "SELECT id FROM alarms WHERE id = ? AND chat_id = ? AND platform = ? AND sent = 0"
       )
-      .get(id, chatId);
+      .get(id, chatId, platform);
     if (!alarm) return `[알람 #${id} 없음 또는 이미 완료]`;
     getDb().run("UPDATE alarms SET sent = 1 WHERE id = ?", [id]);
     return `알람 #${id} 취소됨`;

@@ -16,4 +16,10 @@ export function createMessenger(platform: string): Messenger {
   }
 }
 
+export function createMessengers(platforms: string[]): Messenger[] {
+  const unique = [...new Set(platforms.map((p) => p.trim()).filter(Boolean))];
+  if (unique.length === 0) throw new Error("MESSENGER must include at least one platform");
+  return unique.map((platform) => createMessenger(platform));
+}
+
 export type { Messenger, IncomingMsg, OutFile, FileRef, FileDownloader, Platform } from "./types";

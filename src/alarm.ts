@@ -1,8 +1,8 @@
 import { getDb } from "./db";
 import { config } from "./config";
-import type { Messenger } from "./messenger/types";
+import type { Messenger, Platform } from "./messenger/types";
 
-let _msgr: Messenger | null = null;
+let _registry = new Map<Platform, Messenger>();
 
 export type RepeatType = "daily" | "weekly" | "weekdays" | "monthly";
 
@@ -10,18 +10,19 @@ export function registerAlarm(
   chatId: string,
   fireAt: number,
   content: string,
+  platform: Platform,
   repeat?: RepeatType
 ): void {
   const repeatDom = repeat === "monthly" ? getDomInTz(fireAt, config.timezone) : null;
   const result = getDb().run(
-    "INSERT INTO alarms (chat_id, fire_at, content, repeat, repeat_dom) VALUES (?, ?, ?, ?, ?)",
-    [chatId, fireAt, content, repeat ?? null, repeatDom]
+    "INSERT INTO alarms (chat_id, fire_at, content, platform, repeat, repeat_dom) VALUES (?, ?, ?, ?, ?, ?)",
+    [chatId, fireAt, content, platform, repeat ?? null, repeatDom]
   );
-  scheduleAlarm(Number(result.lastInsertRowid), fireAt, chatId, content, repeat ?? null, repeatDom);
+  scheduleAlarm(Number(result.lastInsertRowid), fireAt, chatId, content, platform, repeat ?? null, repeatDom);
 }
 
-export function initAlarms(messenger: Messenger): void {
-  _msgr = messenger;
+export function initAlarms(registry: Map<Platform, Messenger>): void {
+  _registry = registry;
 
   const pending = getDb()
     .query<
@@ -30,11 +31,12 @@ export function initAlarms(messenger: Messenger): void {
         chat_id: string;
         fire_at: number;
         content: string;
+        platform: Platform;
         repeat: string | null;
         repeat_dom: number | null;
       },
       []
-    >("SELECT id, chat_id, fire_at, content, repeat, repeat_dom FROM alarms WHERE sent = 0")
+    >("SELECT id, chat_id, fire_at, content, platform, repeat, repeat_dom FROM alarms WHERE sent = 0")
     .all();
 
   for (const alarm of pending) {
@@ -43,6 +45,7 @@ export function initAlarms(messenger: Messenger): void {
       alarm.fire_at,
       alarm.chat_id,
       alarm.content,
+      alarm.platform,
       alarm.repeat as RepeatType | null,
       alarm.repeat_dom
     );
@@ -59,16 +62,17 @@ export function initAlarms(messenger: Messenger): void {
           chat_id: string;
           fire_at: number;
           content: string;
+          platform: Platform;
           repeat: string | null;
           repeat_dom: number | null;
         },
         [number]
-      >("SELECT id, chat_id, fire_at, content, repeat, repeat_dom FROM alarms WHERE fire_at <= ? AND sent = 0")
+      >("SELECT id, chat_id, fire_at, content, platform, repeat, repeat_dom FROM alarms WHERE fire_at <= ? AND sent = 0")
       .all(now);
 
     for (const alarm of missed) {
       console.warn(`[alarm] safety-net 발송: id=${alarm.id}`);
-      fire(alarm.id, alarm.fire_at, alarm.chat_id, alarm.content, alarm.repeat as RepeatType | null, alarm.repeat_dom);
+      fire(alarm.id, alarm.fire_at, alarm.chat_id, alarm.content, alarm.platform, alarm.repeat as RepeatType | null, alarm.repeat_dom);
     }
   }, 5 * 60_000);
 }
@@ -80,14 +84,15 @@ function scheduleAlarm(
   fireAt: number,
   chatId: string,
   content: string,
+  platform: Platform,
   repeat: RepeatType | null,
   repeatDom: number | null
 ): void {
   const delay = fireAt * 1000 - Date.now();
   if (delay <= 0) {
-    fire(id, fireAt, chatId, content, repeat, repeatDom);
+    fire(id, fireAt, chatId, content, platform, repeat, repeatDom);
   } else if (delay <= MAX_TIMEOUT_MS) {
-    setTimeout(() => fire(id, fireAt, chatId, content, repeat, repeatDom), delay);
+    setTimeout(() => fire(id, fireAt, chatId, content, platform, repeat, repeatDom), delay);
   }
   // 초과 시 safety-net 폴링(5분)에 위임
 }
@@ -97,6 +102,7 @@ function fire(
   scheduledAt: number,
   chatId: string,
   content: string,
+  platform: Platform,
   repeat: RepeatType | null,
   repeatDom: number | null
 ): void {
@@ -109,13 +115,19 @@ function fire(
   if (repeat) {
     const nextAt = nextFireAt(scheduledAt, repeat, repeatDom, config.timezone);
     getDb().run("UPDATE alarms SET fire_at = ? WHERE id = ?", [nextAt, id]);
-    scheduleAlarm(id, nextAt, chatId, content, repeat, repeatDom);
+    scheduleAlarm(id, nextAt, chatId, content, platform, repeat, repeatDom);
   } else {
     getDb().run("UPDATE alarms SET sent = 1 WHERE id = ?", [id]);
   }
 
-  _msgr
-    ?.sendText(chatId, `⏰ ${content}`)
+  const messenger = _registry.get(platform);
+  if (!messenger) {
+    console.warn(`[alarm] messenger not running for platform=${platform}, skip alarm id=${id}`);
+    return;
+  }
+
+  messenger
+    .sendText(chatId, `⏰ ${content}`)
     .catch((err) => console.error("알람 발송 실패:", err));
 }
 
