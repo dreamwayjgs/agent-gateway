@@ -15,13 +15,13 @@ const db = new Database(dbPath, { readonly: true });
 const rows = db
   .query<
     { id: number; file_name: string | null; memo: string | null; uploaded_by: string | null; uploaded_at: number },
-    [number]
+    [string]
   >(
     `SELECT id, file_name, memo, uploaded_by, uploaded_at
      FROM files WHERE chat_id = ?
      ORDER BY uploaded_at DESC LIMIT 50`
   )
-  .all(Number(chatId));
+  .all(chatId);
 
 if (rows.length === 0) {
   console.log("저장된 파일이 없습니다.");

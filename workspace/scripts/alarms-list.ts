@@ -16,14 +16,14 @@ const now = Math.floor(Date.now() / 1000);
 const rows = db
   .query<
     { id: number; fire_at: number; content: string; repeat: string | null },
-    [number, number]
+    [string, number]
   >(
     `SELECT id, fire_at, content, repeat
      FROM alarms
      WHERE chat_id = ? AND sent = 0 AND fire_at > ?
      ORDER BY fire_at ASC`
   )
-  .all(Number(chatId), now);
+  .all(chatId, now);
 
 if (rows.length === 0) {
   console.log("예정된 알람이 없습니다.");

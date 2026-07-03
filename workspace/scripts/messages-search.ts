@@ -20,14 +20,14 @@ const like = `%${query}%`;
 const rows = db
   .query<
     { id: number; first_name: string | null; text: string | null; date: number; role: string },
-    [number, string, number]
+    [string, string, number]
   >(
     `SELECT id, first_name, text, date, role
      FROM messages
      WHERE chat_id = ? AND text LIKE ?
      ORDER BY date DESC LIMIT ?`
   )
-  .all(Number(chatId), like, limit);
+  .all(chatId, like, limit);
 
 if (rows.length === 0) {
   console.log("일치하는 메시지가 없습니다.");

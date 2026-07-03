@@ -18,14 +18,14 @@ const like = `%${query}%`;
 const rows = db
   .query<
     { id: number; file_name: string | null; memo: string | null; uploaded_by: string | null; uploaded_at: number },
-    [number, string, string, string]
+    [string, string, string, string]
   >(
     `SELECT id, file_name, memo, uploaded_by, uploaded_at
      FROM files
      WHERE chat_id = ? AND (memo LIKE ? OR file_name LIKE ? OR uploaded_by LIKE ?)
      ORDER BY uploaded_at DESC`
   )
-  .all(Number(chatId), like, like, like);
+  .all(chatId, like, like, like);
 
 if (rows.length === 0) {
   console.log("일치하는 파일이 없습니다.");
