@@ -1,12 +1,18 @@
 process.env.TELEGRAM_BOT_TOKEN ??= "1:test-token";
+process.env.DB_FILE = ":memory:";
 
-import { test, expect } from "bun:test";
+import { beforeEach, test, expect } from "bun:test";
+import { getDb } from "../src/db";
+import { addAllow, isFamilyAllowed, listAllow } from "../src/messenger/discord-allowlist";
 import {
   DiscordMessenger,
-  isDiscordAllowed,
   splitDiscordText,
   toIncoming,
 } from "../src/messenger/discord";
+
+beforeEach(() => {
+  getDb().run("DELETE FROM discord_allowlist");
+});
 
 function fakeMessage(over: any = {}) {
   return {
@@ -30,7 +36,7 @@ function hasUnpairedSurrogate(text: string): boolean {
     const code = text.charCodeAt(i);
     if (code >= 0xd800 && code <= 0xdbff) {
       const next = text.charCodeAt(i + 1);
-      if (next < 0xdc00 || next > 0xdfff) return true;
+      if (Number.isNaN(next) || next < 0xdc00 || next > 0xdfff) return true;
       i++;
       continue;
     }
@@ -78,10 +84,11 @@ test("toIncoming maps Discord attachments as files with content as caption", () 
   expect(JSON.stringify(msg.raw)).toContain("file.png");
 });
 
-test("isDiscordAllowed allows empty allowlist and blocks missing users", () => {
-  expect(isDiscordAllowed("u1", new Set())).toBe(true);
-  expect(isDiscordAllowed("u1", new Set(["u1"]))).toBe(true);
-  expect(isDiscordAllowed("u2", new Set(["u1"]))).toBe(false);
+test("Discord DB allowlist allows admin and registered users only", () => {
+  expect(isFamilyAllowed("999999999999999999", "999999999999999999")).toBe(true);
+  expect(isFamilyAllowed("111111111111111111", "999999999999999999")).toBe(false);
+  addAllow("111111111111111111", "가족");
+  expect(isFamilyAllowed("111111111111111111", "999999999999999999")).toBe(true);
 });
 
 test("Discord text chunks stay within 2000 chars", () => {
@@ -105,7 +112,7 @@ test("Discord text chunks do not split astral emoji surrogate pairs", () => {
 });
 
 test("DiscordMessenger.sendFile sends notice for any oversize file", async () => {
-  const messenger = new DiscordMessenger("token", []);
+  const messenger = new DiscordMessenger("token", "999999999999999999");
   const texts: { chatId: string; text: string }[] = [];
   (messenger as any).client = {
     channels: {
@@ -124,12 +131,24 @@ test("DiscordMessenger.sendFile sends notice for any oversize file", async () =>
   expect(texts).toEqual([{ chatId: "c1", text: "파일이 커서 전송 못 함: big.jpg" }]);
 });
 
-test("DiscordMessenger.onMessage ignores bot and non-allowlisted messages", async () => {
-  const messenger = new DiscordMessenger("token", ["allowed"]);
+test("DiscordMessenger.onMessage ignores bot, handles admin commands, notifies unknown once, and dispatches registered users", async () => {
+  const messenger = new DiscordMessenger("token", "999999999999999999");
   let listener: ((message: any) => Promise<void>) | null = null;
+  const sent: string[] = [];
+  const adminDms: string[] = [];
   (messenger as any).client = {
     on: (_event: string, fn: (message: any) => Promise<void>) => {
       listener = fn;
+    },
+    channels: {
+      fetch: async () => ({
+        send: async (text: string) => sent.push(text),
+      }),
+    },
+    users: {
+      fetch: async (_id: string) => ({
+        send: async (text: string) => adminDms.push(text),
+      }),
     },
   };
   const handled: string[] = [];
@@ -139,8 +158,103 @@ test("DiscordMessenger.onMessage ignores bot and non-allowlisted messages", asyn
   });
 
   await listener!(fakeMessage({ author: { id: "bot", username: "bot", bot: true } }));
-  await listener!(fakeMessage({ author: { id: "blocked", username: "blocked" } }));
-  await listener!(fakeMessage({ author: { id: "allowed", username: "allowed" } }));
+  await listener!(fakeMessage({ author: { id: "999999999999999999", username: "owner" }, content: "!허용 111111111111111111 가족" }));
+  await listener!(fakeMessage({ author: { id: "222222222222222222", username: "blocked" }, guild: { name: "family" } }));
+  await listener!(fakeMessage({ author: { id: "222222222222222222", username: "blocked" }, guild: { name: "family" } }));
+  await listener!(fakeMessage({ author: { id: "111111111111111111", username: "allowed" } }));
 
-  expect(handled).toEqual(["allowed"]);
+  expect(handled).toEqual(["111111111111111111"]);
+  expect(sent).toEqual(["허용 완료: 111111111111111111 (가족)"]);
+  expect(listAllow().map((row) => ({ user_id: row.user_id, name: row.name }))).toEqual([
+    { user_id: "111111111111111111", name: "가족" },
+  ]);
+  expect(adminDms.length).toBe(1);
+  expect(adminDms[0]).toContain("blocked");
+  expect(adminDms[0]).toContain("family");
+});
+
+test("DiscordMessenger admin block and list commands do not reach handler", async () => {
+  addAllow("111111111111111111", "가족");
+  const messenger = new DiscordMessenger("token", "999999999999999999");
+  let listener: ((message: any) => Promise<void>) | null = null;
+  const sent: string[] = [];
+  (messenger as any).client = {
+    on: (_event: string, fn: (message: any) => Promise<void>) => {
+      listener = fn;
+    },
+    channels: {
+      fetch: async () => ({
+        send: async (text: string) => sent.push(text),
+      }),
+    },
+  };
+  const handled: string[] = [];
+  messenger.onMessage(async (msg) => {
+    handled.push(msg.userId ?? "");
+  });
+
+  await listener!(fakeMessage({ author: { id: "999999999999999999", username: "owner" }, content: "!목록" }));
+  await listener!(fakeMessage({ author: { id: "999999999999999999", username: "owner" }, content: "!차단 111111111111111111" }));
+
+  expect(handled).toEqual([]);
+  expect(sent[0]).toContain("111111111111111111 (가족)");
+  expect(sent[1]).toBe("차단 완료: 111111111111111111");
+  expect(listAllow()).toEqual([]);
+});
+
+test("DiscordMessenger admin commands are DM-only and invalid command shapes show usage", async () => {
+  const messenger = new DiscordMessenger("token", "999999999999999999");
+  let listener: ((message: any) => Promise<void>) | null = null;
+  const sent: string[] = [];
+  const handled: string[] = [];
+  (messenger as any).client = {
+    on: (_event: string, fn: (message: any) => Promise<void>) => {
+      listener = fn;
+    },
+    channels: {
+      fetch: async () => ({
+        send: async (text: string) => sent.push(text),
+      }),
+    },
+  };
+  messenger.onMessage(async (msg) => {
+    handled.push(msg.text ?? "");
+  });
+
+  await listener!(fakeMessage({ author: { id: "999999999999999999", username: "owner" }, content: "!목록", guild: { name: "family" } }));
+  await listener!(fakeMessage({ author: { id: "999999999999999999", username: "owner" }, content: "!허용" }));
+  await listener!(fakeMessage({ author: { id: "999999999999999999", username: "owner" }, content: "!차단 123 엄마" }));
+
+  expect(handled).toEqual([]);
+  expect(sent[0]).toBe("관리자 명령은 나와의 DM에서만 사용할 수 있어요.");
+  expect(sent[1]).toContain("사용법:");
+  expect(sent[2]).toContain("사용법:");
+});
+
+test("DiscordMessenger retries unknown-user notification after send failure", async () => {
+  const messenger = new DiscordMessenger("token", "999999999999999999");
+  let listener: ((message: any) => Promise<void>) | null = null;
+  let attempts = 0;
+  const adminDms: string[] = [];
+  (messenger as any).client = {
+    on: (_event: string, fn: (message: any) => Promise<void>) => {
+      listener = fn;
+    },
+    users: {
+      fetch: async (_id: string) => ({
+        send: async (text: string) => {
+          attempts++;
+          if (attempts === 1) throw new Error("transient");
+          adminDms.push(text);
+        },
+      }),
+    },
+  };
+  messenger.onMessage(async () => {});
+
+  await listener!(fakeMessage({ author: { id: "222222222222222222", username: "blocked" } }));
+  await listener!(fakeMessage({ author: { id: "222222222222222222", username: "blocked" } }));
+
+  expect(attempts).toBe(2);
+  expect(adminDms.length).toBe(1);
 });

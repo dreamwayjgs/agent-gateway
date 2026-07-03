@@ -172,6 +172,16 @@ const MIGRATIONS: { name: string; sql: string }[] = [
       ALTER TABLE voice_logs_new RENAME TO voice_logs;
     `,
   },
+  {
+    name: "010_discord_allowlist",
+    sql: `
+      CREATE TABLE IF NOT EXISTS discord_allowlist (
+        user_id   TEXT PRIMARY KEY NOT NULL,
+        name      TEXT,
+        added_at  INTEGER NOT NULL
+      );
+    `,
+  },
 ];
 
 let _db: Database | null = null;

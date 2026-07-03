@@ -8,7 +8,7 @@ services:
       - WORKSPACE_DIR=/home/bun/workspace
       - MESSENGER=${MESSENGER:-telegram}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
-      - DISCORD_ALLOWLIST=${DISCORD_ALLOWLIST:-}
+      - DISCORD_ADMIN_USER_ID=${DISCORD_ADMIN_USER_ID:-}
     logging:
       driver: json-file
       options:

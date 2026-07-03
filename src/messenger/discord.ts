@@ -6,6 +6,15 @@ import {
   type Collection,
   type Message,
 } from "discord.js";
+import {
+  addAllow,
+  adminCommandUsage,
+  isAdminCommandText,
+  isFamilyAllowed,
+  listAllow,
+  parseAdminCommand,
+  removeAllow,
+} from "./discord-allowlist";
 import type { FileRef, IncomingMsg, Messenger, OutFile } from "./types";
 
 type MessageHandler = (msg: IncomingMsg) => Promise<void>;
@@ -34,17 +43,12 @@ type DiscordMessageLike = {
   };
   content: string;
   attachments: Collection<string, DiscordAttachmentLike> | DiscordAttachmentLike[];
-  guild: unknown | null;
+  guild: { name?: string | null } | null;
   createdTimestamp: number;
 };
 
 const DISCORD_TEXT_LIMIT = 2000;
 const DISCORD_FILE_LIMIT = 10 * 1024 * 1024;
-
-export function isDiscordAllowed(userId: string, allowlist: Set<string>): boolean {
-  // Empty allowlist is dev/initial setup only. Production must set family userIds.
-  return allowlist.size === 0 || allowlist.has(userId);
-}
 
 export function splitDiscordText(text: string): string[] {
   const chunks: string[] = [];
@@ -105,10 +109,12 @@ export function toIncoming(message: DiscordMessageLike): IncomingMsg {
 
 export class DiscordMessenger implements Messenger {
   private client: Client;
-  private allowlist: Set<string>;
+  private notifiedUnknown = new Set<string>();
+  private warnedMissingAdmin = false;
+  private maxNotifiedUnknown = 1000;
 
-  constructor(private token: string, allowlist: string[]) {
-    this.allowlist = new Set(allowlist);
+  constructor(private token: string, private adminId: string) {
+    if (!adminId) this.warnMissingAdmin();
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -123,8 +129,11 @@ export class DiscordMessenger implements Messenger {
   onMessage(handler: MessageHandler): void {
     this.client.on("messageCreate", async (message: Message) => {
       if (message.author.bot) return;
+      if (message.author.id === this.adminId && await this.handleAdminCommand(message as unknown as DiscordMessageLike)) {
+        return;
+      }
       if (!this.isAllowed(message.author.id)) {
-        console.log(`[discord] ignored message from non-allowlisted user ${message.author.id}`);
+        await this.notifyAdminUnknownUser(message as unknown as DiscordMessageLike);
         return;
       }
       await handler(toIncoming(message as unknown as DiscordMessageLike));
@@ -132,7 +141,70 @@ export class DiscordMessenger implements Messenger {
   }
 
   isAllowed(userId: string): boolean {
-    return isDiscordAllowed(userId, this.allowlist);
+    return isFamilyAllowed(userId, this.adminId);
+  }
+
+  private async handleAdminCommand(message: DiscordMessageLike): Promise<boolean> {
+    if (!isAdminCommandText(message.content)) return false;
+    if (message.guild != null) {
+      await this.sendText(message.channelId, "관리자 명령은 나와의 DM에서만 사용할 수 있어요.");
+      return true;
+    }
+
+    const command = parseAdminCommand(message.content);
+    if (!command) {
+      await this.sendText(message.channelId, adminCommandUsage());
+      return true;
+    }
+
+    if (command.cmd === "allow") {
+      addAllow(command.userId, command.name);
+      await this.sendText(message.channelId, `허용 완료: ${command.userId}${command.name ? ` (${command.name})` : ""}`);
+      return true;
+    }
+    if (command.cmd === "block") {
+      removeAllow(command.userId);
+      await this.sendText(message.channelId, `차단 완료: ${command.userId}`);
+      return true;
+    }
+
+    const rows = listAllow();
+    const body = rows.length === 0
+      ? "등록된 가족 없음"
+      : rows.map((row) => `- ${row.user_id}${row.name ? ` (${row.name})` : ""}`).join("\n");
+    await this.sendText(message.channelId, body);
+    return true;
+  }
+
+  private async notifyAdminUnknownUser(message: DiscordMessageLike): Promise<void> {
+    const userId = message.author.id;
+    if (this.notifiedUnknown.has(userId)) return;
+
+    if (!this.adminId) {
+      this.warnMissingAdmin();
+      return;
+    }
+
+    const userName = message.author.globalName ?? message.author.username;
+    const context = message.guild?.name ?? "DM";
+    const text = `⚠️ 미등록 사용자 ${userName}(\`${userId}\`)가 ${context}에서 접촉. 허용: \`!허용 ${userId} ${userName}\``;
+    try {
+      const admin = await this.client.users.fetch(this.adminId);
+      await admin.send(text);
+      if (this.notifiedUnknown.size >= this.maxNotifiedUnknown) {
+        const oldest = this.notifiedUnknown.values().next().value;
+        if (oldest) this.notifiedUnknown.delete(oldest);
+      }
+      this.notifiedUnknown.add(userId);
+    } catch (err) {
+      console.log(`[discord] failed to notify admin for unknown user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private warnMissingAdmin(): void {
+    if (this.warnedMissingAdmin) return;
+    this.warnedMissingAdmin = true;
+    console.warn("DISCORD_ADMIN_USER_ID 미설정 — 관리자 온보딩 불가, admin 통과·알림 없음");
   }
 
   async sendText(chatId: string, text: string): Promise<void> {
@@ -167,6 +239,7 @@ export class DiscordMessenger implements Messenger {
   }
 
   async start(): Promise<void> {
+    if (!this.adminId) this.warnMissingAdmin();
     await this.client.login(this.token);
   }
 

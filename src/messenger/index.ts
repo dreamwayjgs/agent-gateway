@@ -10,7 +10,7 @@ export function createMessenger(platform: string): Messenger {
       return new TelegramMessenger(config.telegramToken);
     case "discord":
       if (!config.discordToken) throw new Error("DISCORD_BOT_TOKEN is required");
-      return new DiscordMessenger(config.discordToken, config.discordAllowlist);
+      return new DiscordMessenger(config.discordToken, config.discordAdminUserId);
     default:
       throw new Error(`지원하지 않는 메신저: "${platform}" (현재 telegram/discord만 지원)`);
   }
