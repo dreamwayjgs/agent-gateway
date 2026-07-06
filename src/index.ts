@@ -10,6 +10,7 @@ import { getHelpText } from "./help";
 import { downloadAndSaveFile, tryUpdateMemo, extractFileRefs } from "./files";
 import { getChatSettings, updateChatSettings } from "./chat-settings";
 import { transcribeAndTranslate, saveVoiceLog, LANG_LABELS } from "./translate";
+import { join } from "node:path";
 import { fetchNaverPlaceInfo } from "./tools/navermap";
 import { fetchKakaoPlaceInfo } from "./tools/kakaomap";
 import { fetchTmapPlaceInfo } from "./tools/tmap";
@@ -19,9 +20,29 @@ import { safeChatSegment } from "./util";
 import type { IncomingMsg, Messenger, OutFile } from "./messenger/types";
 
 const TRIGGER_ALIASES = ["$ ", "% "];
+const SPACE_CONTEXT_MAX_CHARS = 4096;
 
 export function sessionKeyFor(msg: Pick<IncomingMsg, "platform" | "chatId">): string {
   return `chat:${msg.platform}:${msg.chatId}`;
+}
+
+export async function loadSpaceContext(chatId: string): Promise<string> {
+  try {
+    const segment = safeChatSegment(chatId);
+    const contextPath = join(config.workspaceDir, "files", segment, "CONTEXT.md");
+    const file = Bun.file(contextPath);
+    if (!(await file.exists())) return "";
+
+    let content = (await file.text()).trim();
+    if (!content) return "";
+    if (content.length > SPACE_CONTEXT_MAX_CHARS) {
+      content = `${content.slice(0, SPACE_CONTEXT_MAX_CHARS)}…(생략)`;
+    }
+
+    return `[공간 컨텍스트] (이 방 폴더: files/${segment}/)\n${content}\n`;
+  } catch {
+    return "";
+  }
 }
 
 // 모든 텍스트 메시지 저장 (원본 동작: text 있을 때만 저장)
@@ -86,7 +107,6 @@ async function handleVoice(msg: IncomingMsg, messenger: Messenger): Promise<void
   try {
     const { buffer } = await messenger.downloadFile(voice);
 
-    const { join } = await import("node:path");
     const { mkdir } = await import("node:fs/promises");
     relPath = join("voice", safeChatSegment(chatId), `${msg.date}_voice.ogg`);
     localPath = join(config.workspaceDir, relPath);
@@ -226,7 +246,11 @@ async function handleText(msg: IncomingMsg, messenger: Messenger): Promise<void>
     timeZone: config.timezone,
     hour12: false,
   });
-  finalPrompt = `[현재 시각: ${nowKst}] [채팅 ID: ${chatId}]\n\n${finalPrompt}`;
+  const promptPrefix = `[현재 시각: ${nowKst}] [채팅 ID: ${chatId}]`;
+  const spaceContext = await loadSpaceContext(chatId);
+  finalPrompt = spaceContext
+    ? `${promptPrefix}\n\n${spaceContext}\n${finalPrompt}`
+    : `${promptPrefix}\n\n${finalPrompt}`;
 
   const PARKING_KEYWORDS = ["주차", "방문차량", "크레딧"];
   if (PARKING_KEYWORDS.some((k) => prompt.includes(k))) {
