@@ -213,6 +213,31 @@ const MIGRATIONS: { name: string; sql: string }[] = [
         END;
     `,
   },
+  {
+    name: "013_alarm_interval_repeat",
+    sql: `
+      ALTER TABLE alarms ADD COLUMN repeat_unit TEXT;
+      ALTER TABLE alarms ADD COLUMN repeat_interval INTEGER;
+      ALTER TABLE alarms ADD COLUMN repeat_count INTEGER;
+      ALTER TABLE alarms ADD COLUMN repeat_until INTEGER;
+
+      UPDATE alarms
+        SET repeat_unit = CASE repeat
+            WHEN 'daily' THEN 'day'
+            WHEN 'weekly' THEN 'week'
+            WHEN 'monthly' THEN 'month'
+            WHEN 'weekdays' THEN 'weekdays'
+            ELSE NULL
+          END,
+          repeat_interval = CASE repeat
+            WHEN 'daily' THEN 1
+            WHEN 'weekly' THEN 1
+            WHEN 'monthly' THEN 1
+            WHEN 'weekdays' THEN 1
+            ELSE NULL
+          END;
+    `,
+  },
 ];
 
 let _db: Database | null = null;

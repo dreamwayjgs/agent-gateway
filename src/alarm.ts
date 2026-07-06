@@ -4,49 +4,69 @@ import type { Messenger, Platform } from "./messenger/types";
 
 let _registry = new Map<Platform, Messenger>();
 
-export type RepeatType = "daily" | "weekly" | "weekdays" | "monthly";
+export type RepeatUnit = "minute" | "hour" | "day" | "week" | "month" | "weekdays";
+export type RepeatSpec = { unit: RepeatUnit; interval: number; count?: number; until?: number };
+
+type AlarmRow = {
+  id: number;
+  chat_id: string;
+  fire_at: number;
+  content: string;
+  platform: Platform;
+  repeat_unit: RepeatUnit | null;
+  repeat_interval: number | null;
+  repeat_count: number | null;
+  repeat_until: number | null;
+  repeat_dom: number | null;
+};
 
 export function registerAlarm(
   chatId: string,
   fireAt: number,
   content: string,
   platform: Platform,
-  repeat?: RepeatType
+  spec?: RepeatSpec | null
 ): void {
-  const repeatDom = repeat === "monthly" ? getDomInTz(fireAt, config.timezone) : null;
+  const repeatDom = spec?.unit === "month" ? getDomInTz(fireAt, config.timezone) : null;
   const result = getDb().run(
-    "INSERT INTO alarms (chat_id, fire_at, content, platform, repeat, repeat_dom) VALUES (?, ?, ?, ?, ?, ?)",
-    [chatId, fireAt, content, platform, repeat ?? null, repeatDom]
+    `INSERT INTO alarms
+      (chat_id, fire_at, content, platform, repeat_dom, repeat_unit, repeat_interval, repeat_count, repeat_until)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      chatId,
+      fireAt,
+      content,
+      platform,
+      repeatDom,
+      spec?.unit ?? null,
+      spec?.interval ?? null,
+      spec?.count ?? null,
+      spec?.until ?? null,
+    ]
   );
-  scheduleAlarm(Number(result.lastInsertRowid), fireAt, chatId, content, platform, repeat ?? null, repeatDom);
+  scheduleAlarm(Number(result.lastInsertRowid), fireAt, chatId, content, platform, spec ?? null, repeatDom);
 }
 
 export function initAlarms(registry: Map<Platform, Messenger>): void {
   _registry = registry;
 
   const pending = getDb()
-    .query<
-      {
-        id: number;
-        chat_id: string;
-        fire_at: number;
-        content: string;
-        platform: Platform;
-        repeat: string | null;
-        repeat_dom: number | null;
-      },
-      []
-    >("SELECT id, chat_id, fire_at, content, platform, repeat, repeat_dom FROM alarms WHERE sent = 0")
+    .query<AlarmRow, []>(
+      `SELECT id, chat_id, fire_at, content, platform, repeat_dom,
+        repeat_unit, repeat_interval, repeat_count, repeat_until
+       FROM alarms WHERE sent = 0`
+    )
     .all();
 
   for (const alarm of pending) {
+    const spec = rowRepeatSpec(alarm);
     scheduleAlarm(
       alarm.id,
       alarm.fire_at,
       alarm.chat_id,
       alarm.content,
       alarm.platform,
-      alarm.repeat as RepeatType | null,
+      spec,
       alarm.repeat_dom
     );
   }
@@ -56,25 +76,28 @@ export function initAlarms(registry: Map<Platform, Messenger>): void {
   setInterval(() => {
     const now = Math.floor(Date.now() / 1000);
     const missed = getDb()
-      .query<
-        {
-          id: number;
-          chat_id: string;
-          fire_at: number;
-          content: string;
-          platform: Platform;
-          repeat: string | null;
-          repeat_dom: number | null;
-        },
-        [number]
-      >("SELECT id, chat_id, fire_at, content, platform, repeat, repeat_dom FROM alarms WHERE fire_at <= ? AND sent = 0")
+      .query<AlarmRow, [number]>(
+        `SELECT id, chat_id, fire_at, content, platform, repeat_dom,
+          repeat_unit, repeat_interval, repeat_count, repeat_until
+         FROM alarms WHERE fire_at <= ? AND sent = 0`
+      )
       .all(now);
 
     for (const alarm of missed) {
       console.warn(`[alarm] safety-net 발송: id=${alarm.id}`);
-      fire(alarm.id, alarm.fire_at, alarm.chat_id, alarm.content, alarm.platform, alarm.repeat as RepeatType | null, alarm.repeat_dom);
+      fire(alarm.id, alarm.fire_at, alarm.chat_id, alarm.content, alarm.platform, rowRepeatSpec(alarm), alarm.repeat_dom);
     }
   }, 5 * 60_000);
+}
+
+function rowRepeatSpec(row: Pick<AlarmRow, "repeat_unit" | "repeat_interval" | "repeat_count" | "repeat_until">): RepeatSpec | null {
+  if (!row.repeat_unit || !row.repeat_interval) return null;
+  return {
+    unit: row.repeat_unit,
+    interval: row.repeat_interval,
+    count: row.repeat_count ?? undefined,
+    until: row.repeat_until ?? undefined,
+  };
 }
 
 const MAX_TIMEOUT_MS = 2 ** 31 - 1; // ~24.8일, setTimeout 32비트 한계
@@ -85,25 +108,25 @@ function scheduleAlarm(
   chatId: string,
   content: string,
   platform: Platform,
-  repeat: RepeatType | null,
+  spec: RepeatSpec | null,
   repeatDom: number | null
 ): void {
   const delay = fireAt * 1000 - Date.now();
   if (delay <= 0) {
-    fire(id, fireAt, chatId, content, platform, repeat, repeatDom);
+    fire(id, fireAt, chatId, content, platform, spec, repeatDom);
   } else if (delay <= MAX_TIMEOUT_MS) {
-    setTimeout(() => fire(id, fireAt, chatId, content, platform, repeat, repeatDom), delay);
+    setTimeout(() => fire(id, fireAt, chatId, content, platform, spec, repeatDom), delay);
   }
   // 초과 시 safety-net 폴링(5분)에 위임
 }
 
-function fire(
+export function fire(
   id: number,
   scheduledAt: number,
   chatId: string,
   content: string,
   platform: Platform,
-  repeat: RepeatType | null,
+  spec: RepeatSpec | null,
   repeatDom: number | null
 ): void {
   // setTimeout이 지연된 사이 취소됐을 경우 대비
@@ -112,10 +135,19 @@ function fire(
     .get(id);
   if (!row || row.sent === 1) return;
 
-  if (repeat) {
-    const nextAt = nextFireAt(scheduledAt, repeat, repeatDom, config.timezone);
-    getDb().run("UPDATE alarms SET fire_at = ? WHERE id = ?", [nextAt, id]);
-    scheduleAlarm(id, nextAt, chatId, content, platform, repeat, repeatDom);
+  if (spec) {
+    const newCount = spec.count != null ? spec.count - 1 : null;
+    if (newCount != null && newCount <= 0) {
+      getDb().run("UPDATE alarms SET sent = 1, repeat_count = ? WHERE id = ?", [newCount, id]);
+    } else {
+      const nextAt = nextFireAt(scheduledAt, spec.unit, spec.interval, repeatDom, config.timezone);
+      if (spec.until != null && nextAt > spec.until) {
+        getDb().run("UPDATE alarms SET sent = 1, repeat_count = ? WHERE id = ?", [newCount, id]);
+      } else {
+        getDb().run("UPDATE alarms SET fire_at = ?, repeat_count = ? WHERE id = ?", [nextAt, newCount, id]);
+        scheduleAlarm(id, nextAt, chatId, content, platform, { ...spec, count: newCount ?? undefined }, repeatDom);
+      }
+    }
   } else {
     getDb().run("UPDATE alarms SET sent = 1 WHERE id = ?", [id]);
   }
@@ -137,17 +169,22 @@ function getDomInTz(unixSec: number, tz: string): number {
   );
 }
 
-function nextFireAt(
+export function nextFireAt(
   scheduledAt: number,
-  repeat: RepeatType,
+  unit: RepeatUnit,
+  interval: number,
   repeatDom: number | null,
   tz: string
 ): number {
-  switch (repeat) {
-    case "daily":
-      return scheduledAt + 86400;
-    case "weekly":
-      return scheduledAt + 7 * 86400;
+  switch (unit) {
+    case "minute":
+      return scheduledAt + interval * 60;
+    case "hour":
+      return scheduledAt + interval * 3600;
+    case "day":
+      return scheduledAt + interval * 86400;
+    case "week":
+      return scheduledAt + interval * 7 * 86400;
     case "weekdays": {
       let next = scheduledAt + 86400;
       for (let i = 0; i < 7; i++) {
@@ -160,7 +197,7 @@ function nextFireAt(
       }
       return next;
     }
-    case "monthly": {
+    case "month": {
       const d = new Date(scheduledAt * 1000);
       const parts = new Intl.DateTimeFormat("en-US", {
         timeZone: tz,
@@ -181,9 +218,9 @@ function nextFireAt(
       const minute = get("minute");
       const second = get("second");
 
-      month += 1;
-      if (month > 12) {
-        month = 1;
+      month += interval;
+      while (month > 12) {
+        month -= 12;
         year += 1;
       }
 

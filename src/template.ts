@@ -1,6 +1,6 @@
 import { config } from "./config";
 import { getDb } from "./db";
-import { registerAlarm, type RepeatType } from "./alarm";
+import { registerAlarm, type RepeatSpec, type RepeatUnit } from "./alarm";
 import type { Platform } from "./messenger/types";
 
 const HANDLERS: Record<string, (value: string) => string> = {
@@ -35,22 +35,74 @@ function resolveIso(iso: string, ianaTimezone: string): string {
   }
 }
 
-const VALID_REPEATS = new Set<string>(["daily", "weekly", "weekdays", "monthly"]);
+const NAMED_REPEATS: Record<string, RepeatSpec> = {
+  daily: { unit: "day", interval: 1 },
+  weekly: { unit: "week", interval: 1 },
+  weekdays: { unit: "weekdays", interval: 1 },
+  monthly: { unit: "month", interval: 1 },
+};
 
-function parseRepeat(val: string | undefined): RepeatType | undefined {
-  if (!val) return undefined;
-  const v = val.trim().toLowerCase();
-  return VALID_REPEATS.has(v) ? (v as RepeatType) : undefined;
+function parseRepeatSpec(val: string | undefined): { spec: RepeatSpec | null; error?: string } {
+  if (!val) return { spec: null };
+  const tokens = val.split("|").map((t) => t.trim().toLowerCase()).filter(Boolean);
+  if (tokens.length === 0) return { spec: null };
+
+  let spec: RepeatSpec | null = null;
+  const repeatToken = tokens[0];
+  if (NAMED_REPEATS[repeatToken]) {
+    spec = { ...NAMED_REPEATS[repeatToken] };
+  } else {
+    const every = repeatToken.match(/^every=(\d+)(m|h|d|w|mo)$/);
+    if (!every) return { spec: null, error: `반복 형식 오류 — ${repeatToken}` };
+    const interval = Number(every[1]);
+    if (!Number.isInteger(interval) || interval <= 0) return { spec: null, error: `반복 간격 오류 — ${repeatToken}` };
+    const unitMap: Record<string, RepeatUnit> = { m: "minute", h: "hour", d: "day", w: "week", mo: "month" };
+    spec = { unit: unitMap[every[2]], interval };
+  }
+
+  for (const token of tokens.slice(1)) {
+    const count = token.match(/^count=(\d+)$/);
+    if (count) {
+      const value = Number(count[1]);
+      if (!Number.isInteger(value) || value <= 0) return { spec: null, error: `반복 횟수 오류 — ${token}` };
+      spec.count = value;
+      continue;
+    }
+
+    const until = token.match(/^until=(.+)$/);
+    if (until) {
+      const epoch = Math.floor(new Date(resolveIso(until[1], config.timezone)).getTime() / 1000);
+      if (isNaN(epoch)) return { spec: null, error: `반복 종료일 오류 — ${until[1]}` };
+      spec.until = epoch;
+      continue;
+    }
+
+    return { spec: null, error: `반복 옵션 오류 — ${token}` };
+  }
+
+  return { spec };
 }
 
-function repeatLabelKo(repeat: string): string {
-  const labels: Record<string, string> = {
-    daily: "매일",
-    weekly: "매주",
+export function repeatLabelKo(spec: RepeatSpec | null): string {
+  if (!spec) return "-";
+  const unitLabels: Record<RepeatUnit, string> = {
+    minute: "분",
+    hour: "시간",
+    day: "일",
+    week: "주",
+    month: "개월",
     weekdays: "주중매일",
-    monthly: "매월",
   };
-  return labels[repeat] ?? repeat;
+  const base = spec.unit === "weekdays"
+    ? "주중매일"
+    : spec.interval === 1
+      ? ({ minute: "매분", hour: "매시간", day: "매일", week: "매주", month: "매월" } as Record<Exclude<RepeatUnit, "weekdays">, string>)[spec.unit]
+      : `${spec.interval}${unitLabels[spec.unit]}마다`;
+  const count = spec.count != null ? ` ${spec.count}회` : "";
+  const until = spec.until != null
+    ? ` ~${new Date(spec.until * 1000).toLocaleDateString("ko-KR", { timeZone: config.timezone })}까지`
+    : "";
+  return `${base}${count}${until}`;
 }
 
 // {{알람:ISO8601|내용}} 또는 {{알람:ISO8601|내용|반복유형}}
@@ -61,15 +113,16 @@ const ALARM_CANCEL_RE = /\{\{알람취소:(\d+)\}\}/g;
 export function extractAlarms(text: string, chatId: string, platform: Platform): string {
   // 1. 알람 등록
   let result = text.replace(ALARM_RE, (_, iso, content, repeatRaw) => {
-    const repeat = parseRepeat(repeatRaw);
+    const parsed = parseRepeatSpec(repeatRaw);
+    if (parsed.error) return `[알람 등록 실패: ${parsed.error}]`;
     const fireAt = Math.floor(new Date(resolveIso(iso, config.timezone)).getTime() / 1000);
     if (isNaN(fireAt)) return `[알람 등록 실패: 시간 파싱 오류 — ${iso}]`;
-    registerAlarm(chatId, fireAt, content.trim(), platform, repeat);
+    registerAlarm(chatId, fireAt, content.trim(), platform, parsed.spec);
     const timeStr = new Date(fireAt * 1000).toLocaleString("ko-KR", {
       timeZone: config.timezone,
       hour12: false,
     });
-    const label = repeat ? ` (${repeatLabelKo(repeat)})` : "";
+    const label = parsed.spec ? ` (${repeatLabelKo(parsed.spec)})` : "";
     return `⏰ 알람 등록됨: ${timeStr}${label} | ${content.trim()}`;
   });
 
@@ -78,10 +131,19 @@ export function extractAlarms(text: string, chatId: string, platform: Platform):
     const now = Math.floor(Date.now() / 1000);
     const rows = getDb()
       .query<
-        { id: number; fire_at: number; content: string; repeat: string | null },
+        {
+          id: number;
+          fire_at: number;
+          content: string;
+          repeat_unit: RepeatUnit | null;
+          repeat_interval: number | null;
+          repeat_count: number | null;
+          repeat_until: number | null;
+        },
         [string, Platform, number]
       >(
-        "SELECT id, fire_at, content, repeat FROM alarms WHERE chat_id = ? AND platform = ? AND sent = 0 AND fire_at > ? ORDER BY fire_at ASC"
+        `SELECT id, fire_at, content, repeat_unit, repeat_interval, repeat_count, repeat_until
+         FROM alarms WHERE chat_id = ? AND platform = ? AND sent = 0 AND fire_at > ? ORDER BY fire_at ASC`
       )
       .all(chatId, platform, now);
     if (rows.length === 0) return "예정된 알람이 없습니다.";
@@ -91,7 +153,10 @@ export function extractAlarms(text: string, chatId: string, platform: Platform):
           timeZone: config.timezone,
           hour12: false,
         });
-        const label = r.repeat ? ` [${repeatLabelKo(r.repeat)}]` : "";
+        const spec = r.repeat_unit && r.repeat_interval
+          ? { unit: r.repeat_unit, interval: r.repeat_interval, count: r.repeat_count ?? undefined, until: r.repeat_until ?? undefined }
+          : null;
+        const label = spec ? ` [${repeatLabelKo(spec)}]` : "";
         return `#${r.id} ${timeStr}${label} — ${r.content}`;
       })
       .join("\n");

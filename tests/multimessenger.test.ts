@@ -94,7 +94,7 @@ test("extractAlarms stores platform and filters list/cancel by platform", () => 
 test("migration 011 backfills session keys and defaults alarms platform", () => {
   const db = new Database(":memory:");
   db.run(`CREATE TABLE sessions (key TEXT PRIMARY KEY, session_id TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`);
-  db.run(`CREATE TABLE alarms (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT NOT NULL, fire_at INTEGER NOT NULL, content TEXT NOT NULL, sent INTEGER NOT NULL DEFAULT 0, repeat TEXT, repeat_dom INTEGER)`);
+  db.run(`CREATE TABLE alarms (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT NOT NULL, fire_at INTEGER NOT NULL, content TEXT NOT NULL, sent INTEGER NOT NULL DEFAULT 0, repeat TEXT, repeat_dom INTEGER, repeat_unit TEXT, repeat_interval INTEGER, repeat_count INTEGER, repeat_until INTEGER)`);
   db.run("INSERT INTO sessions (key, session_id, created_at, updated_at) VALUES (?, ?, 1, 1)", ["chat:123", "s1"]);
   db.run("INSERT INTO sessions (key, session_id, created_at, updated_at) VALUES (?, ?, 1, 1)", ["chat:discord:456", "s2"]);
   db.run("INSERT INTO alarms (chat_id, fire_at, content) VALUES ('123', 1000, 'hi')");
