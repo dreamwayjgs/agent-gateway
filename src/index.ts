@@ -21,6 +21,7 @@ import type { IncomingMsg, Messenger, OutFile } from "./messenger/types";
 
 const TRIGGER_ALIASES = ["$ ", "% "];
 const SPACE_CONTEXT_MAX_CHARS = 4096;
+const SPACE_CONTEXT_NONE = "[공간 컨텍스트 없음]";
 
 export function sessionKeyFor(msg: Pick<IncomingMsg, "platform" | "chatId">): string {
   return `chat:${msg.platform}:${msg.chatId}`;
@@ -29,12 +30,13 @@ export function sessionKeyFor(msg: Pick<IncomingMsg, "platform" | "chatId">): st
 export async function loadSpaceContext(chatId: string): Promise<string> {
   try {
     const segment = safeChatSegment(chatId);
+    const missingContext = `${SPACE_CONTEXT_NONE} (이 방 폴더: files/${segment}/)`;
     const contextPath = join(config.workspaceDir, "files", segment, "CONTEXT.md");
     const file = Bun.file(contextPath);
-    if (!(await file.exists())) return "";
+    if (!(await file.exists())) return missingContext;
 
     let content = (await file.text()).trim();
-    if (!content) return "";
+    if (!content) return missingContext;
     if (content.length > SPACE_CONTEXT_MAX_CHARS) {
       content = `${content.slice(0, SPACE_CONTEXT_MAX_CHARS)}…(생략)`;
     }

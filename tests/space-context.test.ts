@@ -28,27 +28,29 @@ test("loadSpaceContext: CONTEXT.md가 있으면 블록을 반환한다", async (
   }
 });
 
-test("loadSpaceContext: CONTEXT.md가 없으면 빈 문자열을 반환한다", async () => {
+test("loadSpaceContext: CONTEXT.md가 없으면 부재 마커를 반환한다", async () => {
   const originalWorkspaceDir = config.workspaceDir;
   try {
     config.workspaceDir = await makeWorkspace("123");
 
     const context = await loadSpaceContext("123");
 
-    expect(context).toBe("");
+    expect(context).toBe("[공간 컨텍스트 없음] (이 방 폴더: files/123/)");
+    expect(context).toContain("files/123/");
   } finally {
     config.workspaceDir = originalWorkspaceDir;
   }
 });
 
-test("loadSpaceContext: 공백 파일이면 빈 문자열을 반환한다", async () => {
+test("loadSpaceContext: 공백 파일이면 부재 마커를 반환한다", async () => {
   const originalWorkspaceDir = config.workspaceDir;
   try {
     config.workspaceDir = await makeWorkspace("123", " \n\t ");
 
     const context = await loadSpaceContext("123");
 
-    expect(context).toBe("");
+    expect(context).toBe("[공간 컨텍스트 없음] (이 방 폴더: files/123/)");
+    expect(context).toContain("files/123/");
   } finally {
     config.workspaceDir = originalWorkspaceDir;
   }
