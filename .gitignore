@@ -3,7 +3,7 @@ ref/
 res/
 TASK.md
 TOOLS_MEMO.md
-agents/
+agents/handoff/
 
 # runtime data
 data/
