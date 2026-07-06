@@ -154,6 +154,12 @@ export async function getGuroContext(): Promise<string> {
 const REGISTER_RE = /\{\{주차등록:([^|}\s]+)\|([^|]+)\|([^}]+)\}\}/g;
 const DELETE_RE = /\{\{주차삭제:([^|}\s]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^}]+)\}\}/g;
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+const PLATE_NEW = /^\d{2,3}[가-힣]\d{4}$/;
+const PLATE_OLD = /^[가-힣]{2}\d{1,2}[가-힣]\d{4}$/;
+
+export function isKoreanPlate(carNo: string): boolean {
+  return PLATE_NEW.test(carNo) || PLATE_OLD.test(carNo);
+}
 
 export async function processGuroTemplates(text: string): Promise<string> {
   const seen = new Map<string, Promise<string>>();
@@ -164,6 +170,10 @@ export async function processGuroTemplates(text: string): Promise<string> {
     const carNo = m[1]!.trim();
     const startDt = m[2]!.trim();
     const endDt = m[3]!.trim();
+    if (!isKoreanPlate(carNo)) {
+      seen.set(full, Promise.resolve(`등록 오류: 번호판 형식 아님 "${carNo}" — 차량목록.md에서 실제 번호로 등록하세요`));
+      continue;
+    }
     if (!DATETIME_RE.test(startDt) || !DATETIME_RE.test(endDt)) {
       seen.set(full, Promise.resolve(`등록 오류: 날짜 형식 오류 (YYYY-MM-DD HH:MM:SS 필요)`));
       continue;
@@ -186,6 +196,10 @@ export async function processGuroTemplates(text: string): Promise<string> {
     const startdateTime = m[3]!.trim();
     const enddateTime = m[4]!.trim();
     const no = Number(m[5]!.trim());
+    if (!isKoreanPlate(carNo)) {
+      seen.set(full, Promise.resolve(`삭제 오류: 번호판 형식 아님 "${carNo}" — 차량목록.md에서 실제 번호로 등록하세요`));
+      continue;
+    }
     if (!Number.isInteger(no) || no < 0) {
       seen.set(full, Promise.resolve(`삭제 오류: no 값 형식 오류 (0 이상 정수 필요)`));
       continue;
