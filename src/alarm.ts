@@ -135,12 +135,14 @@ export function fire(
     .get(id);
   if (!row || row.sent === 1) return;
 
+  const now = Math.floor(Date.now() / 1000);
+
   if (spec) {
     const newCount = spec.count != null ? spec.count - 1 : null;
     if (newCount != null && newCount <= 0) {
       getDb().run("UPDATE alarms SET sent = 1, repeat_count = ? WHERE id = ?", [newCount, id]);
     } else {
-      const nextAt = nextFireAt(scheduledAt, spec.unit, spec.interval, repeatDom, config.timezone);
+      const nextAt = firstFutureFireAt(scheduledAt, spec, repeatDom, config.timezone, now);
       if (spec.until != null && nextAt > spec.until) {
         getDb().run("UPDATE alarms SET sent = 1, repeat_count = ? WHERE id = ?", [newCount, id]);
       } else {
@@ -167,6 +169,61 @@ function getDomInTz(unixSec: number, tz: string): number {
   return Number(
     new Date(unixSec * 1000).toLocaleDateString("en-US", { timeZone: tz, day: "numeric" })
   );
+}
+
+function firstFutureFireAt(
+  scheduledAt: number,
+  spec: RepeatSpec,
+  repeatDom: number | null,
+  tz: string,
+  now: number
+): number {
+  const first = nextFireAt(scheduledAt, spec.unit, spec.interval, repeatDom, tz);
+  if (first > now) return first;
+
+  // invalid interval: cannot advance without looping; caller treats as expired
+  if (spec.interval <= 0) return Number.MAX_SAFE_INTEGER;
+
+  switch (spec.unit) {
+    case "minute": {
+      const elapsed = now - scheduledAt;
+      const k = Math.floor(elapsed / (spec.interval * 60)) + 1;
+      return scheduledAt + k * spec.interval * 60;
+    }
+    case "hour": {
+      const elapsed = now - scheduledAt;
+      const k = Math.floor(elapsed / (spec.interval * 3600)) + 1;
+      return scheduledAt + k * spec.interval * 3600;
+    }
+    case "day": {
+      const elapsed = now - scheduledAt;
+      const k = Math.floor(elapsed / (spec.interval * 86400)) + 1;
+      return scheduledAt + k * spec.interval * 86400;
+    }
+    case "week": {
+      const elapsed = now - scheduledAt;
+      const k = Math.floor(elapsed / (spec.interval * 7 * 86400)) + 1;
+      return scheduledAt + k * spec.interval * 7 * 86400;
+    }
+    case "weekdays": {
+      let next = first;
+      let guard = 0;
+      while (next <= now && guard < 10000) {
+        next = nextFireAt(next, spec.unit, spec.interval, repeatDom, tz);
+        guard++;
+      }
+      return next > now ? next : Number.MAX_SAFE_INTEGER;
+    }
+    case "month": {
+      let next = first;
+      let guard = 0;
+      while (next <= now && guard < 1000) {
+        next = nextFireAt(next, spec.unit, spec.interval, repeatDom, tz);
+        guard++;
+      }
+      return next > now ? next : Number.MAX_SAFE_INTEGER;
+    }
+  }
 }
 
 export function nextFireAt(

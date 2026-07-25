@@ -3,14 +3,41 @@ process.env.DB_FILE = ":memory:";
 
 import { Database } from "bun:sqlite";
 import { beforeEach, expect, test } from "bun:test";
-import { fire, nextFireAt } from "../src/alarm";
+import { fire, initAlarms, nextFireAt } from "../src/alarm";
 import { getDb } from "../src/db";
 import { extractAlarms } from "../src/template";
+import type { Messenger, Platform } from "../src/messenger/types";
 import type { RepeatUnit } from "../src/alarm";
+
+const sentTexts: { chatId: string; text: string }[] = [];
+const fakeMessenger: Messenger = {
+  platform: "telegram" as Platform,
+  onMessage: () => {},
+  start: async () => {},
+  sendText: async (chatId: string, text: string) => {
+    sentTexts.push({ chatId, text });
+  },
+  sendFile: async () => {},
+  sendTyping: async () => {},
+  downloadFile: async () => ({ buffer: Buffer.from(""), mimeType: "text/plain" }),
+};
+
+initAlarms(new Map([["telegram", fakeMessenger]]));
 
 beforeEach(() => {
   getDb().run("DELETE FROM alarms");
+  sentTexts.length = 0;
 });
+
+function withNow(iso: string, fn: () => void) {
+  const realNow = Date.now;
+  Date.now = () => new Date(iso).getTime();
+  try {
+    fn();
+  } finally {
+    Date.now = realNow;
+  }
+}
 
 function epoch(iso: string): number {
   return Math.floor(new Date(iso).getTime() / 1000);
@@ -76,7 +103,7 @@ test("fire marks sent when next occurrence exceeds until", () => {
 });
 
 test("fire reschedules endless repeat", () => {
-  const fireAt = epoch("2026-07-06T09:00:00+09:00");
+  const fireAt = epoch("2126-07-06T09:00:00+09:00");
   const id = insertAlarm({ fireAt, unit: "week", interval: 2 });
 
   fire(id, fireAt, "chat", "content", "telegram", { unit: "week", interval: 2 }, null);
@@ -84,6 +111,67 @@ test("fire reschedules endless repeat", () => {
   const row = getDb().query<{ sent: number; fire_at: number }, [number]>("SELECT sent, fire_at FROM alarms WHERE id = ?").get(id)!;
   expect(row.sent).toBe(0);
   expect(row.fire_at).toBe(fireAt + 14 * 86400);
+  expect(sentTexts).toEqual([{ chatId: "chat", text: "⏰ content" }]);
+});
+
+test("overdue endless repeat fires once and jumps to first future boundary", () => {
+  withNow("2026-07-25T09:00:00+09:00", () => {
+    const fireAt = epoch("2026-07-06T09:00:00+09:00");
+    const id = insertAlarm({ fireAt, unit: "week", interval: 2 });
+
+    fire(id, fireAt, "chat", "content", "telegram", { unit: "week", interval: 2 }, null);
+
+    expect(sentTexts).toEqual([{ chatId: "chat", text: "⏰ content" }]);
+    const row = getDb().query<{ sent: number; fire_at: number }, [number]>("SELECT sent, fire_at FROM alarms WHERE id = ?").get(id)!;
+    expect(row.sent).toBe(0);
+    expect(row.fire_at).toBe(epoch("2026-08-03T09:00:00+09:00"));
+  });
+});
+
+test("overdue repeat decrements count only once", () => {
+  withNow("2026-07-25T09:00:00+09:00", () => {
+    const fireAt = epoch("2026-07-06T09:00:00+09:00");
+    const id = insertAlarm({ fireAt, unit: "week", interval: 2, count: 3 });
+
+    fire(id, fireAt, "chat", "content", "telegram", { unit: "week", interval: 2, count: 3 }, null);
+
+    expect(sentTexts).toEqual([{ chatId: "chat", text: "⏰ content" }]);
+    const row = getDb().query<{ sent: number; fire_at: number; repeat_count: number | null }, [number]>(
+      "SELECT sent, fire_at, repeat_count FROM alarms WHERE id = ?"
+    ).get(id)!;
+    expect(row.sent).toBe(0);
+    expect(row.repeat_count).toBe(2);
+    expect(row.fire_at).toBe(epoch("2026-08-03T09:00:00+09:00"));
+  });
+});
+
+test("overdue repeat ends when no future occurrence before until", () => {
+  withNow("2026-07-25T09:00:00+09:00", () => {
+    const fireAt = epoch("2026-07-06T09:00:00+09:00");
+    const until = epoch("2026-07-27T09:00:00+09:00");
+    const id = insertAlarm({ fireAt, unit: "week", interval: 2, until });
+
+    fire(id, fireAt, "chat", "content", "telegram", { unit: "week", interval: 2, until }, null);
+
+    expect(sentTexts).toEqual([{ chatId: "chat", text: "⏰ content" }]);
+    const row = getDb().query<{ sent: number; fire_at: number }, [number]>("SELECT sent, fire_at FROM alarms WHERE id = ?").get(id)!;
+    expect(row.sent).toBe(1);
+  });
+});
+
+test("overdue minute repeat jumps years without recursion", () => {
+  withNow("2028-07-06T09:01:00+09:00", () => {
+    const fireAt = epoch("2026-07-06T09:00:00+09:00");
+    const id = insertAlarm({ fireAt, unit: "minute", interval: 5 });
+
+    fire(id, fireAt, "chat", "content", "telegram", { unit: "minute", interval: 5 }, null);
+
+    expect(sentTexts).toEqual([{ chatId: "chat", text: "⏰ content" }]);
+    const row = getDb().query<{ sent: number; fire_at: number }, [number]>("SELECT sent, fire_at FROM alarms WHERE id = ?").get(id)!;
+    expect(row.sent).toBe(0);
+    expect((row.fire_at - fireAt) % (5 * 60)).toBe(0);
+    expect(row.fire_at).toBeGreaterThan(epoch("2028-07-06T09:01:00+09:00"));
+  });
 });
 
 test("extractAlarms parses interval repeat specs and legacy names", () => {
