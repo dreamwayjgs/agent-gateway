@@ -18,3 +18,5 @@ services:
       - ./data:/home/bun/data
       - ./workspace:/home/bun/workspace
       - ./data/codex-auth:/home/bun/.codex
+      - /home/gsjung/disks/1T_B/shared/exchange/library:/exchange/library:ro
+      - /home/gsjung/disks/1T_B/shared/exchange/contributions:/exchange/contributions:rw
