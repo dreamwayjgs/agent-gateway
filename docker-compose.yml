@@ -20,3 +20,61 @@ services:
       - ./data/codex-auth:/home/bun/.codex
       - /home/gsjung/disks/1T_B/shared/exchange/library:/exchange/library:ro
       - /home/gsjung/disks/1T_B/shared/exchange/contributions:/exchange/contributions:rw
+    networks:
+      - default
+      - proactive-internal
+
+  # Step 10a — proactive isolated runner. Internal network only.
+  proactive-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.runner
+    restart: "no"
+    environment:
+      - CODEX_MODEL=${CODEX_MODEL:-}
+      - AGENT_TIMEOUT_MS=${AGENT_TIMEOUT_MS:-300000}
+      - PROACTIVE_RUNNER_SECRET=${PROACTIVE_RUNNER_SECRET:-}
+      - HTTP_PROXY=http://egress-proxy:3128
+      - HTTPS_PROXY=http://egress-proxy:3128
+      - NO_PROXY=localhost,127.0.0.1
+      - CODEX_HOME=/home/bun/.codex-w
+      - BOT_TIMEZONE=${BOT_TIMEZONE:-Asia/Seoul}
+    volumes:
+      - ./workspace:/workspace:ro
+      - ./data/codex-auth/auth.json:/home/bun/.codex-w/auth.json:ro
+    tmpfs:
+      - /home/bun:uid=1000,gid=1000,mode=700
+      - /home/bun/.codex-w:uid=1000,gid=1000,mode=700
+      - /tmp
+    user: "bun"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proactive-internal
+
+  # Step 10a — egress allowlist proxy. Only container with external route
+  # on proactive-internal. No published ports, no credentials, no volumes.
+  egress-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/spool/squid
+      - /var/log/squid
+      - /tmp
+    networks:
+      - proactive-internal
+      - default
+
+networks:
+  proactive-internal:
+    internal: true

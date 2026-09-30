@@ -1,0 +1,16 @@
+FROM oven/bun:latest
+
+# Codex CLI entrypoint is a node script -> nodejs runtime required
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates nodejs && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /opt/runner && chown bun:bun /opt/runner
+
+USER bun
+ENV HOME=/home/bun
+WORKDIR /opt/runner
+
+COPY --chown=bun:bun runner/ ./runner/
+RUN bun add @openai/codex
+ENV PATH="/opt/runner/node_modules/.bin:${PATH}"
+
+CMD ["bun", "runner/server.ts"]

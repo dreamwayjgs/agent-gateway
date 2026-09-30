@@ -1,0 +1,11 @@
+FROM debian:stable-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends squid && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY runner/squid.conf /etc/squid/squid.conf
+RUN mkdir -p /run/squid /var/spool/squid /var/log/squid && chown -R proxy:proxy /run/squid /var/spool/squid /var/log/squid
+
+USER proxy
+
+CMD ["squid", "-N", "-d", "1"]
