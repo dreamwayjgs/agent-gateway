@@ -36,29 +36,20 @@ Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully suppor
 
 ---
 
+<!-- tmt-rules:start -->
+<!-- Managed by the global project-rules.md template. Edit outside these markers; sync replaces everything inside. -->
 ## Three Man Team
 
-| 이름 | 역할 | 도구 | 역할 파일 |
-|------|------|------|-----------|
-| 앨리스 | Architect | Claude | `agents/ARCHITECT.md` |
-| 밥 | Builder | Claude 또는 opencode/Codex | Claude → `agents/BUILDER.md` · opencode/Codex → `AGENTS.md §1` |
-| 리처드 | Reviewer (1차) | Claude | `agents/REVIEWER.md` |
-| 로저 | Second Reviewer (2차) | Codex | `AGENTS.md §2` |
+- Roles run in human-started sessions. Do not auto-spawn a role unless the Project Owner explicitly asks.
+- Role personas live only in `ARCHITECT.md`, `BUILDER.md`, `REVIEWER.md`, `ROGER.md`, and optional `OPERATOR.md`.
+- Before role work, read only that role file and its required handoff files.
+- Handoff files overwrite each step except `handoff/BUILD-LOG.md`, which is append-only.
+- Bob runs tests on final post-review-fix state and records commands and results in `handoff/BUILD-LOG.md` and `handoff/REVIEW-REQUEST.md`.
+- Richard and Roger do not run tests unless Alice or the Project Owner explicitly directs it. They review code and Bob's recorded results.
+- Alice confirms reported green state still matches commit state at deploy gate. If code changed after Bob's report, Alice runs tests once.
 
-> 어떤 역할이 어떤 도구로 도는지는 **상황에 따라 다르다**. opencode/Codex로 구동되는 역할은
-> `CLAUDE.md`가 아니라 루트 `AGENTS.md`의 해당 섹션(§1 밥 / §2 로저)을 읽는다.
+## Operator
 
-### 활성 리뷰어
-
-- 리처드 (1차)
-- 로저 (2차)
-
-### Handoff 파일 (`agents/handoff/`)
-
-| 파일 | 작성자 → 독자 |
-|------|--------------|
-| `ARCHITECT-BRIEF.md` | 앨리스 → 밥 |
-| `REVIEW-REQUEST.md` | 밥 → 리처드 |
-| `REVIEW-FEEDBACK.md` | 리처드 → 로저 → 밥 |
-| `BUILD-LOG.md` | 공유 기록, 앨리스 소유 |
-| `SESSION-CHECKPOINT.md` | 앨리스가 세션 종료 시 작성. |
+- Oz is optional. Use `OPERATOR.md` only after its environment coordinates are filled from observed facts.
+- Oz does not write repository code. Oz writes operational reports and performs only actions allowed by `OPERATOR.md` tiers.
+<!-- tmt-rules:end -->
